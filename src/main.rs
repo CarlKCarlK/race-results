@@ -5,25 +5,11 @@ use std::f32::consts::E;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-fn delta1(
+fn delta(
     name: &str,
     contains: bool,
     name_to_prob: &HashMap<String, f32>,
     prob_name_right: f32,
-) -> f32 {
-    let prob_coincidence = name_to_prob[name];
-    if contains {
-        (prob_name_right / prob_coincidence).ln()
-    } else {
-        ((1.0 - prob_name_right) / (1.0 - prob_coincidence)).ln()
-    }
-}
-
-fn delta2(
-    name: &str,
-    prob_name_right: f32,
-    contains: bool,
-    name_to_prob: &HashMap<String, f32>,
 ) -> f32 {
     let prob_coincidence = name_to_prob[name];
     if contains {
@@ -139,14 +125,14 @@ fn main() {
     );
 
     for contains_first_name in [false, true].iter() {
-        let first_name_points = delta1(
+        let first_name_points = delta(
             first_name,
             *contains_first_name,
             &name_to_prob,
             prob_name_right,
         );
         for contains_last_name in [false, true].iter() {
-            let last_name_points = delta1(
+            let last_name_points = delta(
                 last_name,
                 *contains_last_name,
                 &name_to_prob,
@@ -183,13 +169,13 @@ fn main() {
     ]
     .iter()
     {
-        let some_first_name_points = delta2(name, *prob_name_right, *contains, &name_to_prob);
+        let some_first_name_points = delta(name, *contains, &name_to_prob, *prob_name_right);
         println!("\t{}: {:.2} points", name, some_first_name_points);
         first_name_points = first_name_points.max(some_first_name_points);
     }
     println!("first_name: {:.2} points", first_name_points);
 
-    let last_name_points = delta2("SCOTT", 0.60, true, &name_to_prob);
+    let last_name_points = delta("SCOTT", true, &name_to_prob, 0.60);
     println!("last_name: {:.2} points", last_name_points);
 
     let post_points = prior_points + first_name_points + last_name_points;
@@ -213,13 +199,13 @@ fn main() {
     ]
     .iter()
     {
-        let some_first_name_points = delta2(*name, *prob_name_right, *contains, &name_to_prob);
+        let some_first_name_points = delta(name, *contains, &name_to_prob, *prob_name_right);
         println!("\t{}: {:.2} points", name, some_first_name_points);
         first_name_points = first_name_points.max(some_first_name_points);
     }
     println!("first_name: {:.2} points", first_name_points);
 
-    let last_name_points = delta2("SCOTT", 0.60, true, &name_to_prob);
+    let last_name_points = delta("SCOTT", true, &name_to_prob, 0.6);
     println!("last_name: {:.2} points", last_name_points);
 
     let city_name_points = (0.60 / ((170 + 1) as f32 / (1592 + 2) as f32)).ln();
