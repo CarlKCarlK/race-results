@@ -5,17 +5,34 @@ use std::f32::consts::E;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-fn delta(
-    name: &str,
+fn delta_one_name(
     contains: bool,
-    name_to_prob: &HashMap<String, f32>,
+    name: &str,
     prob_name_right: f32,
+    name_to_prob: &HashMap<String, f32>,
 ) -> f32 {
     let prob_coincidence = name_to_prob[name];
-    delta_from_coincidence(contains, prob_name_right, prob_coincidence)
+    delta_one(contains, prob_coincidence, prob_name_right)
 }
 
-fn delta_from_coincidence(contains: bool, prob_name_right: f32, prob_coincidence: f32) -> f32 {
+fn delta_many(contains_list: &[bool], prob_coincidence_list: &[f32], prob_name_right: f32) -> f32 {
+    assert_eq!(
+        contains_list.len(),
+        prob_coincidence_list.len(),
+        "lengths must match"
+    );
+    contains_list
+        .iter()
+        .zip(prob_coincidence_list.iter())
+        .map(|(contains, prob_coincidence)| {
+            delta_one(*contains, *prob_coincidence, prob_name_right)
+        })
+        .reduce(|a, b| a.max(b))
+        .unwrap_or_else(|| panic!("Expect length > 0"))
+}
+
+#[inline]
+fn delta_one(contains: bool, prob_coincidence: f32, prob_name_right: f32) -> f32 {
     if contains {
         (prob_name_right / prob_coincidence).ln()
     } else {
@@ -81,7 +98,7 @@ fn notebook() {
     println!(
         "post: {post_points:.2} points, {:.5} probability",
         prob(post_points)
-    ); // => post: -8.56 points, 0.00019 probability
+    );
     assert_eq!(post_points, -8.563747);
 
     // No "Robert", but still from Robert
@@ -96,7 +113,7 @@ fn notebook() {
     println!(
         "post: {post_points:.2} points, {:.6} probability",
         prob(post_points)
-    ); // => post: -12.40 points, 0.000004 probability
+    );
     assert_eq!(post_points, -12.397271);
 
     // "Robert" and "Scott" is from Robert Scott.
@@ -117,7 +134,7 @@ fn notebook() {
         "post: {:.2} points, {:.5} probability",
         post_points,
         prob(post_points)
-    ); // => post: -3.86 points, 0.02055 probability
+    );
     assert_eq!(post_points, -3.8642664);
 
     let first_name = "CHELLIE";
@@ -136,18 +153,18 @@ fn notebook() {
     );
 
     for contains_first_name in [false, true].iter() {
-        let first_name_points = delta(
-            first_name,
+        let first_name_points = delta_one_name(
             *contains_first_name,
-            &name_to_prob,
+            first_name,
             prob_name_right,
+            &name_to_prob,
         );
         for contains_last_name in [false, true].iter() {
-            let last_name_points = delta(
-                last_name,
+            let last_name_points = delta_one_name(
                 *contains_last_name,
-                &name_to_prob,
+                last_name,
                 prob_name_right,
+                &name_to_prob,
             );
             let post_points = prior_points + first_name_points + last_name_points;
 
@@ -162,7 +179,6 @@ fn notebook() {
                 post_points,
                 prob(post_points),
             );
-            // => neither name: .0000002, last name: .40, first name: .72, both names: .99
             match (contains_first_name, contains_last_name) {
                 (false, false) => assert_eq!(post_points, -13.345492),
                 (false, true) => assert_eq!(post_points, -0.40545368),
@@ -187,14 +203,15 @@ fn notebook() {
     ]
     .iter()
     {
-        let some_first_name_points = delta(name, *contains, &name_to_prob, *prob_name_right);
+        let some_first_name_points =
+            delta_one_name(*contains, name, *prob_name_right, &name_to_prob);
         println!("\t{}: {:.2} points", name, some_first_name_points);
         first_name_points = first_name_points.max(some_first_name_points);
     }
     println!("first_name: {:.2} points", first_name_points);
     assert_eq!(first_name_points, 4.50986);
 
-    let last_name_points = delta("SCOTT", true, &name_to_prob, prob_name_right);
+    let last_name_points = delta_one_name(true, "SCOTT", prob_name_right, &name_to_prob);
     println!("last_name: {:.2} points", last_name_points);
     assert_eq!(last_name_points, 4.699481);
 
@@ -203,7 +220,7 @@ fn notebook() {
         "post: {:.2} points, {:.5} probability",
         post_points,
         prob(post_points)
-    ); // => post: -2.30 points, 0.09083 probability
+    );
     assert_eq!(post_points, -2.3035736);
 
     // "Bellevue" refers to Robert Scott's town.
@@ -220,19 +237,20 @@ fn notebook() {
     ]
     .iter()
     {
-        let some_first_name_points = delta(name, *contains, &name_to_prob, *prob_name_right);
+        let some_first_name_points =
+            delta_one_name(*contains, name, *prob_name_right, &name_to_prob);
         println!("\t{}: {:.2} points", name, some_first_name_points);
         first_name_points = first_name_points.max(some_first_name_points);
     }
     println!("first_name: {:.2} points", first_name_points);
     println!("assert_eq!(first_name, {first_name});");
 
-    let last_name_points = delta("SCOTT", true, &name_to_prob, prob_name_right);
+    let last_name_points = delta_one_name(true, "SCOTT", prob_name_right, &name_to_prob);
     println!("last_name: {:.2} points", last_name_points);
     println!("assert_eq!(last_name, {last_name});");
 
     let city_by_coincidence = (170 + 1) as f32 / (1592 + 2) as f32;
-    let city_name_points = delta_from_coincidence(true, prob_name_right, city_by_coincidence);
+    let city_name_points = delta_one(true, city_by_coincidence, prob_name_right);
     println!("city: {:.2} points", city_name_points);
     assert_eq!(city_name_points, 1.7215128);
 
@@ -241,11 +259,11 @@ fn notebook() {
         "post: {:.2} points, {:.5} probability",
         post_points,
         prob(post_points)
-    ); // => post: -0.58 points, 0.35846 probability
+    );
     assert_eq!(post_points, -0.5820608);
 
     // Don't see "Bellevue"
-    let city_name_points = delta_from_coincidence(false, prob_name_right, city_by_coincidence);
+    let city_name_points = delta_one(false, city_by_coincidence, prob_name_right);
     println!("city: {:.2} points", city_name_points);
     assert_eq!(city_name_points, -0.80281156);
 
@@ -254,7 +272,7 @@ fn notebook() {
         "post: {:.2} points, {:.5} probability",
         post_points,
         prob(post_points)
-    ); // => post: -0.58 points, 0.35846 probability
+    );
     assert_eq!(post_points, -3.1063852);
 }
 
@@ -293,27 +311,26 @@ fn main() {
     );
 
     // cmk ignoring nicknames for now
-    let first_name_points = delta(
-        &person.first_name,
+    let first_name_points = delta_one_name(
         contains_first,
-        &name_to_prob,
+        &person.first_name,
         prob_name_right,
+        &name_to_prob,
     );
 
     println!("first_name: {:.2} points", first_name_points);
 
-    let last_name_points = delta(
-        &person.last_name,
+    let last_name_points = delta_one_name(
         contains_last,
-        &name_to_prob,
+        &person.last_name,
         prob_name_right,
+        &name_to_prob,
     );
 
     println!("last_name: {:.2} points", last_name_points);
 
     let city_by_coincidence = (170 + 1) as f32 / (result_count + 2) as f32;
-    let city_name_points =
-        delta_from_coincidence(contains_city, prob_name_right, city_by_coincidence);
+    let city_name_points = delta_one(contains_city, city_by_coincidence, prob_name_right);
 
     let post_points = prior_points + first_name_points + last_name_points + city_name_points;
     println!(
