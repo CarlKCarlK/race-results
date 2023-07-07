@@ -71,15 +71,18 @@ fn notebook() {
 
     let prior_points = log_odds(prior_prob);
     println!("prior: {prior_points:.2} points, {prior_prob:.5} probability");
+    assert_eq!(prior_points, -11.512915);
 
     let delta_points = (prob_name_right / prob_coincidence).ln();
     println!("delta: {delta_points:.2} points");
+    assert_eq!(delta_points, 2.9491668);
 
     let post_points = prior_points + delta_points;
     println!(
         "post: {post_points:.2} points, {:.5} probability",
         prob(post_points)
     ); // => post: -8.56 points, 0.00019 probability
+    assert_eq!(post_points, -8.563747);
 
     // No "Robert", but still from Robert
 
@@ -87,12 +90,14 @@ fn notebook() {
 
     let delta_points = ((1.0 - prob_name_right) / (1.0 - prob_coincidence)).ln();
     println!("delta: {delta_points:.2} points");
+    assert_eq!(delta_points, -0.88435626);
 
     let post_points = prior_points + delta_points;
     println!(
         "post: {post_points:.2} points, {:.6} probability",
         prob(post_points)
     ); // => post: -12.40 points, 0.000004 probability
+    assert_eq!(post_points, -12.397271);
 
     // "Robert" and "Scott" is from Robert Scott.
 
@@ -113,6 +118,7 @@ fn notebook() {
         post_points,
         prob(post_points)
     ); // => post: -3.86 points, 0.02055 probability
+    assert_eq!(post_points, -3.8642664);
 
     let first_name = "CHELLIE";
     let last_name = "PINGREE";
@@ -157,6 +163,12 @@ fn notebook() {
                 prob(post_points),
             );
             // => neither name: .0000002, last name: .40, first name: .72, both names: .99
+            match (contains_first_name, contains_last_name) {
+                (false, false) => assert_eq!(post_points, -13.345492),
+                (false, true) => assert_eq!(post_points, -0.40545368),
+                (true, false) => assert_eq!(post_points, 0.9389984),
+                (true, true) => assert_eq!(post_points, 13.879037),
+            }
         }
     }
 
@@ -180,9 +192,11 @@ fn notebook() {
         first_name_points = first_name_points.max(some_first_name_points);
     }
     println!("first_name: {:.2} points", first_name_points);
+    assert_eq!(first_name_points, 4.50986);
 
     let last_name_points = delta("SCOTT", true, &name_to_prob, prob_name_right);
     println!("last_name: {:.2} points", last_name_points);
+    assert_eq!(last_name_points, 4.699481);
 
     let post_points = prior_points + first_name_points + last_name_points;
     println!(
@@ -190,6 +204,7 @@ fn notebook() {
         post_points,
         prob(post_points)
     ); // => post: -2.30 points, 0.09083 probability
+    assert_eq!(post_points, -2.3035736);
 
     // "Bellevue" refers to Robert Scott's town.
     println!(
@@ -210,13 +225,16 @@ fn notebook() {
         first_name_points = first_name_points.max(some_first_name_points);
     }
     println!("first_name: {:.2} points", first_name_points);
+    println!("assert_eq!(first_name, {first_name});");
 
     let last_name_points = delta("SCOTT", true, &name_to_prob, prob_name_right);
     println!("last_name: {:.2} points", last_name_points);
+    println!("assert_eq!(last_name, {last_name});");
 
     let city_by_coincidence = (170 + 1) as f32 / (1592 + 2) as f32;
     let city_name_points = delta_from_coincidence(true, prob_name_right, city_by_coincidence);
     println!("city: {:.2} points", city_name_points);
+    assert_eq!(city_name_points, 1.7215128);
 
     let post_points = prior_points + first_name_points + last_name_points + city_name_points;
     println!(
@@ -224,10 +242,12 @@ fn notebook() {
         post_points,
         prob(post_points)
     ); // => post: -0.58 points, 0.35846 probability
+    assert_eq!(post_points, -0.5820608);
 
     // Don't see "Bellevue"
     let city_name_points = delta_from_coincidence(false, prob_name_right, city_by_coincidence);
     println!("city: {:.2} points", city_name_points);
+    assert_eq!(city_name_points, -0.80281156);
 
     let post_points = prior_points + first_name_points + last_name_points + city_name_points;
     println!(
@@ -235,6 +255,7 @@ fn notebook() {
         post_points,
         prob(post_points)
     ); // => post: -0.58 points, 0.35846 probability
+    assert_eq!(post_points, -3.1063852);
 }
 
 struct Person {
@@ -244,11 +265,15 @@ struct Person {
 }
 
 fn main() {
+    let prob_member_in_race = 0.01;
+    let result_count = 1592;
+    let prior_prob = prob_member_in_race / result_count as f32;
+
     let prob_name_right = 0.60f32;
     let name_to_prob = load_name_to_prob();
 
     // Give a line of race results and a member record, return a probability.
-    let result_line = "Scott, Robert, M, Redmond, 32, 21:00, 1, 10, 5, 100";
+    let result_line = "Scott, Robert, M, Bellevue, 32, 21:00, 1, 10, 5, 100";
     let result_line = result_line.to_uppercase();
     let person = Person {
         first_name: String::from("ROBERT"),
@@ -260,6 +285,13 @@ fn main() {
     let contains_last = result_line.contains(&person.last_name);
     let contains_city = result_line.contains(&person.city);
 
+    let prior_points = log_odds(prior_prob);
+
+    println!(
+        "prior: {:.2} points, {:.5} probability",
+        prior_points, prior_prob
+    );
+
     // cmk ignoring nicknames for now
     let first_name_points = delta(
         &person.first_name,
@@ -268,10 +300,25 @@ fn main() {
         prob_name_right,
     );
 
+    println!("first_name: {:.2} points", first_name_points);
+
     let last_name_points = delta(
         &person.last_name,
         contains_last,
         &name_to_prob,
         prob_name_right,
+    );
+
+    println!("last_name: {:.2} points", last_name_points);
+
+    let city_by_coincidence = (170 + 1) as f32 / (result_count + 2) as f32;
+    let city_name_points =
+        delta_from_coincidence(contains_city, prob_name_right, city_by_coincidence);
+
+    let post_points = prior_points + first_name_points + last_name_points + city_name_points;
+    println!(
+        "post: {:.2} points, {:.5} probability",
+        post_points,
+        prob(post_points)
     );
 }
