@@ -12,7 +12,7 @@ pub fn delta_one_name(
     name_to_prob: &NameToProb,
 ) -> f32 {
     // cmk what if not found?
-    let prob_coincidence = name_to_prob.get(name);
+    let prob_coincidence = name_to_prob.prob(name);
     delta_one(contains, prob_coincidence, prob_right)
 }
 
@@ -26,7 +26,7 @@ pub fn delta_many_names(
     // cmk why bother with collect?
     let prob_coincidence_list: Vec<_> = name_list
         .iter()
-        .map(|name| name_to_prob.get(*name))
+        .map(|name| name_to_prob.prob(name))
         .collect();
     delta_many(contains_list, &prob_coincidence_list, prob_right_list)
 }
@@ -104,25 +104,10 @@ impl Default for NameToProb {
     }
 }
 impl NameToProb {
-    pub fn get(&self, name: &str) -> f32 {
+    pub fn prob(&self, name: &str) -> f32 {
         *self.name_to_prob.get(name).unwrap_or(&self.min_prob)
     }
 }
-
-// fn load_name_to_prob() -> HashMap<String, f32> {
-//     let name_prob_file =
-//         File::open(r"C:\Users\carlk\OneDrive\Shares\RaceResults\name_probability.tsv").unwrap();
-//     let reader = BufReader::new(name_prob_file);
-//     let mut name_to_prob = HashMap::new();
-//     for line in reader.lines().skip(1) {
-//         let line = line.unwrap();
-//         let parts: Vec<&str> = line.split('\t').collect();
-//         let name = parts[0].to_string();
-//         let prob = parts[1].parse::<f32>().unwrap();
-//         name_to_prob.insert(name, prob);
-//     }
-//     name_to_prob
-// }
 
 #[test]
 fn notebook() {
@@ -142,7 +127,7 @@ fn notebook() {
     // Someone else leads to "Robert"
 
     let name_to_prob = NameToProb::default();
-    let prob_coincidence = name_to_prob.get("ROBERT");
+    let prob_coincidence = name_to_prob.prob("ROBERT");
     println!("{prob_coincidence}"); // => 0.03143
 
     // "Robert" is from Robert
@@ -178,10 +163,10 @@ fn notebook() {
         prior_points, prior_prob
     );
 
-    let first_name_points = (prob_right / name_to_prob.get("ROBERT")).ln();
+    let first_name_points = (prob_right / name_to_prob.prob("ROBERT")).ln();
     println!("first_name: {:.2} points", first_name_points);
 
-    let last_name_points = (prob_right / name_to_prob.get("SCOTT")).ln();
+    let last_name_points = (prob_right / name_to_prob.prob("SCOTT")).ln();
     println!("last_name: {:.2} points", last_name_points);
 
     let post_points = prior_points + first_name_points + last_name_points;
@@ -313,13 +298,14 @@ fn notebook() {
     assert_eq!(post_points, -3.1063852);
 }
 
-struct Person {
-    first_name: String,
-    last_name: String,
-    city: String,
-}
+#[test]
+fn test2() {
+    struct Person {
+        first_name: String,
+        last_name: String,
+        city: String,
+    }
 
-fn main() {
     let prob_member_in_race = 0.01;
     let result_count = 1592;
     let prior_prob = prob_member_in_race / result_count as f32;
