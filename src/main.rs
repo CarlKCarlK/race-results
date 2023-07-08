@@ -16,7 +16,7 @@ fn delta_one_name(
     delta_one(contains, prob_coincidence, prob_right)
 }
 
-fn delta_many_names(
+pub fn delta_many_names(
     contains_list: &[bool],
     name_list: &[&str],
     prob_right_list: &[f32],
@@ -72,7 +72,7 @@ fn prob(logodds: f32) -> f32 {
     1.0 / (1.0 + E.powf(-logodds))
 }
 
-fn load_name_to_prob() -> HashMap<String, f32> {
+pub fn load_name_to_prob() -> HashMap<String, f32> {
     let name_prob_file =
         File::open(r"C:\Users\carlk\OneDrive\Shares\RaceResults\name_probability.tsv").unwrap();
     let reader = BufReader::new(name_prob_file);
