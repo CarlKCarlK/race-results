@@ -5,14 +5,14 @@ use std::f32::consts::E;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-fn delta_one_name(
+pub fn delta_one_name(
     contains: bool,
     name: &str,
     prob_right: f32,
-    name_to_prob: &HashMap<String, f32>,
+    name_to_prob: &NameToProb,
 ) -> f32 {
     // cmk what if not found?
-    let prob_coincidence = name_to_prob[name];
+    let prob_coincidence = name_to_prob.get(name);
     delta_one(contains, prob_coincidence, prob_right)
 }
 
@@ -20,11 +20,14 @@ pub fn delta_many_names(
     contains_list: &[bool],
     name_list: &[&str],
     prob_right_list: &[f32],
-    name_to_prob: &HashMap<String, f32>,
+    name_to_prob: &NameToProb,
 ) -> f32 {
     // cmk what if not found?
     // cmk why bother with collect?
-    let prob_coincidence_list: Vec<_> = name_list.iter().map(|name| name_to_prob[*name]).collect();
+    let prob_coincidence_list: Vec<_> = name_list
+        .iter()
+        .map(|name| name_to_prob.get(*name))
+        .collect();
     delta_many(contains_list, &prob_coincidence_list, prob_right_list)
 }
 
@@ -56,7 +59,7 @@ fn delta_many(
 }
 
 #[inline]
-fn delta_one(contains: bool, prob_coincidence: f32, prob_right: f32) -> f32 {
+pub fn delta_one(contains: bool, prob_coincidence: f32, prob_right: f32) -> f32 {
     if contains {
         (prob_right / prob_coincidence).ln()
     } else {
@@ -64,28 +67,62 @@ fn delta_one(contains: bool, prob_coincidence: f32, prob_right: f32) -> f32 {
     }
 }
 
-fn log_odds(prob: f32) -> f32 {
+pub fn log_odds(prob: f32) -> f32 {
     prob.ln() - (1.0 - prob).ln()
 }
 
-fn prob(logodds: f32) -> f32 {
+pub fn prob(logodds: f32) -> f32 {
     1.0 / (1.0 + E.powf(-logodds))
 }
 
-pub fn load_name_to_prob() -> HashMap<String, f32> {
-    let name_prob_file =
-        File::open(r"C:\Users\carlk\OneDrive\Shares\RaceResults\name_probability.tsv").unwrap();
-    let reader = BufReader::new(name_prob_file);
-    let mut name_to_prob = HashMap::new();
-    for line in reader.lines().skip(1) {
-        let line = line.unwrap();
-        let parts: Vec<&str> = line.split('\t').collect();
-        let name = parts[0].to_string();
-        let prob = parts[1].parse::<f32>().unwrap();
-        name_to_prob.insert(name, prob);
-    }
-    name_to_prob
+pub struct NameToProb {
+    name_to_prob: HashMap<String, f32>,
+    min_prob: f32,
 }
+
+impl Default for NameToProb {
+    fn default() -> Self {
+        let name_prob_file =
+            File::open(r"C:\Users\carlk\OneDrive\Shares\RaceResults\name_probability.tsv").unwrap();
+        let reader = BufReader::new(name_prob_file);
+        let mut name_to_prob = HashMap::new();
+        for line in reader.lines().skip(1) {
+            let line = line.unwrap();
+            let parts: Vec<&str> = line.split('\t').collect();
+            let name = parts[0].to_string();
+            let prob = parts[1].parse::<f32>().unwrap();
+            name_to_prob.insert(name, prob);
+        }
+        let min_prob = *name_to_prob
+            .values()
+            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap();
+        Self {
+            name_to_prob,
+            min_prob,
+        }
+    }
+}
+impl NameToProb {
+    pub fn get(&self, name: &str) -> f32 {
+        *self.name_to_prob.get(name).unwrap_or(&self.min_prob)
+    }
+}
+
+// fn load_name_to_prob() -> HashMap<String, f32> {
+//     let name_prob_file =
+//         File::open(r"C:\Users\carlk\OneDrive\Shares\RaceResults\name_probability.tsv").unwrap();
+//     let reader = BufReader::new(name_prob_file);
+//     let mut name_to_prob = HashMap::new();
+//     for line in reader.lines().skip(1) {
+//         let line = line.unwrap();
+//         let parts: Vec<&str> = line.split('\t').collect();
+//         let name = parts[0].to_string();
+//         let prob = parts[1].parse::<f32>().unwrap();
+//         name_to_prob.insert(name, prob);
+//     }
+//     name_to_prob
+// }
 
 #[test]
 fn notebook() {
@@ -104,8 +141,8 @@ fn notebook() {
 
     // Someone else leads to "Robert"
 
-    let name_to_prob = load_name_to_prob();
-    let prob_coincidence = name_to_prob.get("ROBERT").unwrap();
+    let name_to_prob = NameToProb::default();
+    let prob_coincidence = name_to_prob.get("ROBERT");
     println!("{prob_coincidence}"); // => 0.03143
 
     // "Robert" is from Robert
@@ -141,10 +178,10 @@ fn notebook() {
         prior_points, prior_prob
     );
 
-    let first_name_points = (prob_right / name_to_prob["ROBERT"]).ln();
+    let first_name_points = (prob_right / name_to_prob.get("ROBERT")).ln();
     println!("first_name: {:.2} points", first_name_points);
 
-    let last_name_points = (prob_right / name_to_prob["SCOTT"]).ln();
+    let last_name_points = (prob_right / name_to_prob.get("SCOTT")).ln();
     println!("last_name: {:.2} points", last_name_points);
 
     let post_points = prior_points + first_name_points + last_name_points;
@@ -288,7 +325,7 @@ fn main() {
     let prior_prob = prob_member_in_race / result_count as f32;
 
     let prob_right = 0.60f32;
-    let name_to_prob = load_name_to_prob();
+    let name_to_prob = NameToProb::default();
 
     // Give a line of race results and a member record, return a probability.
     let result_line = "Scott, Robert, M, Bellevue, 32, 21:00, 1, 10, 5, 100";

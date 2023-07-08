@@ -1,5 +1,5 @@
-use crate::load_name_to_prob;
 use itertools::Itertools;
+use race_results::{delta_many_names, delta_one, log_odds, prob, NameToProb};
 use regex::Regex;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
@@ -29,7 +29,19 @@ fn main() -> io::Result<()> {
     let results_file_name = r"M:\projects\member_match\carnation2023results.txt";
     let re = Regex::new(r"[\-/ &]").unwrap();
     let total_right = 0.6f32;
-    let name_to_prob = load_name_to_prob();
+    let name_to_prob = NameToProb::default();
+    // let min_prob: f32 = name_to_prob
+    //     .values()
+    //     .cloned()
+    //     .reduce(|a, b| a.min(b))
+    //     .unwrap();
+
+    // let name_to_prob_fn = |name: &str| *name_to_prob.get(name).unwrap_or(&min_prob);
+
+    let prob_member_in_race = 0.01;
+    let result_count = read_lines(results_file_name)?.count();
+    let prior_prob = prob_member_in_race / result_count as f32;
+    let prior_points = log_odds(prior_prob);
 
     for member_list in read_lines(members_file_name)? {
         let line = member_list?;
@@ -60,17 +72,16 @@ fn main() -> io::Result<()> {
         }
 
         // cmk inefficient
-        let mut result_count = 0;
         let city_count = read_lines(results_file_name)?
             .map(|result_line| {
                 let result_line = result_line.unwrap().to_ascii_uppercase();
-                result_count += 1;
                 result_line.contains(&city)
             })
             .filter(|x| *x)
             .count();
         let city_by_coincidence = (city_count + 1) as f32 / (result_count + 2) as f32;
 
+        // cmk kind of crazy inefficient to score lines that have no tokens in common with this member
         for result_line in read_lines(results_file_name)? {
             let result_line = result_line?.to_ascii_uppercase();
 
@@ -78,20 +89,25 @@ fn main() -> io::Result<()> {
                 .iter()
                 .map(|first_name| result_line.contains(first_name))
                 .collect();
-            let contains_list_list: Vec<_> = last_name_list
+            let contains_last_list: Vec<_> = last_name_list
                 .iter()
                 .map(|last_name| result_line.contains(last_name))
                 .collect();
             let contains_city = result_line.contains(&city);
 
             let first_name_points = delta_many_names(
-                contains_first_list,
-                first_name_list,
-                first_right_list,
+                &contains_first_list,
+                &first_name_list,
+                &first_right_list,
                 &name_to_prob,
             );
 
-            println!("first_name: {:.2} points", first_name_points);
+            let last_name_points = delta_many_names(
+                &contains_last_list,
+                &last_name_list,
+                &last_right_list,
+                &name_to_prob,
+            );
 
             //     let last_name_points =
             //         delta_one_name(contains_last, &person.last_name, prob_right, &name_to_prob);
@@ -99,10 +115,19 @@ fn main() -> io::Result<()> {
             //     println!("last_name: {:.2} points", last_name_points);
 
             //     let city_by_coincidence = (170 + 1) as f32 / (result_count + 2) as f32;
-            //     let city_name_points = delta_one(contains_city, city_by_coincidence, prob_right);
+            let city_name_points = delta_one(contains_city, city_by_coincidence, total_right);
 
-            //     let post_points =
-            //         prior_points + first_name_points + last_name_points + city_name_points;
+            let post_points =
+                prior_points + first_name_points + last_name_points + city_name_points;
+
+            let post_prob = prob(post_points);
+
+            if post_prob > 0.05 {
+                println!(
+                    "{} {} {} {:.2} {result_line}",
+                    first_name, last_name, city, post_points
+                );
+            }
         }
     }
     Ok(())
