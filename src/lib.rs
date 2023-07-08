@@ -5,6 +5,8 @@ use std::f32::consts::E;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
+use anyinput::anyinput;
+
 pub fn delta_one_name(
     contains: bool,
     name: &str,
@@ -16,9 +18,10 @@ pub fn delta_one_name(
     delta_one(contains, prob_coincidence, prob_right)
 }
 
+#[anyinput]
 pub fn delta_many_names(
     contains_list: &[bool],
-    name_list: &[&str],
+    name_list: AnyArray<AnyString>,
     prob_right_list: &[f32],
     name_to_prob: &NameToProb,
 ) -> f32 {
@@ -26,7 +29,7 @@ pub fn delta_many_names(
     // cmk why bother with collect?
     let prob_coincidence_list: Vec<_> = name_list
         .iter()
-        .map(|name| name_to_prob.prob(name))
+        .map(|name| name_to_prob.prob(name.as_ref()))
         .collect();
     delta_many(contains_list, &prob_coincidence_list, prob_right_list)
 }
@@ -262,7 +265,7 @@ fn notebook() {
 
     let first_name_points = delta_many_names(
         &[true, true, false],
-        &["ROBERT", "BOB", "ROB"],
+        ["ROBERT", "BOB", "ROB"],
         &[0.50, 0.05, 0.05],
         &name_to_prob,
     );

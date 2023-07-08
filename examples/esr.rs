@@ -80,6 +80,7 @@ fn main() -> io::Result<()> {
     let result_count = results_as_tokens.len();
     let prior_prob = prob_member_in_race / result_count as f32;
     let prior_points = log_odds(prior_prob);
+    let city_conincidence_default = 1f32 / (result_count + 2) as f32;
 
     let result_token_to_line_count =
         results_as_tokens
@@ -94,13 +95,15 @@ fn main() -> io::Result<()> {
     result_token_to_line_count_vec.sort_by_key(|(_token, count)| -**count);
     let mut city_stop_words = HashSet::<String>::new();
     let mut name_stop_words = HashSet::<String>::new();
+    let mut city_to_coincidence = HashMap::<String, f32>::new();
     for (token, count) in result_token_to_line_count_vec.iter() {
         // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
         let city_conincidence = (*count + 1) as f32 / (result_count + 2) as f32;
+        city_to_coincidence.insert(token.to_string(), city_conincidence);
         let city_points_contains = delta_one(true, city_conincidence, total_right);
-        let city_points_absent = delta_one(false, city_conincidence, total_right);
         let name_points_contains = delta_one_name(true, token, total_right, &name_to_prob);
-        let name_points_absent = delta_one_name(false, token, total_right, &name_to_prob);
+        // let city_points_absent = delta_one(false, city_conincidence, total_right);
+        // let name_points_absent = delta_one_name(false, token, total_right, &name_to_prob);
         // println!("{token}\t{count}\t{city_points_contains:.2}\t{city_points_absent:.2}\t{name_points_contains:.2}\t{name_points_absent:.2}");
         if city_points_contains < stop_words_points {
             city_stop_words.insert(token.to_string());
@@ -109,8 +112,8 @@ fn main() -> io::Result<()> {
             name_stop_words.insert(token.to_string());
         }
     }
-    println!("city_stop_words={:?}", city_stop_words);
-    println!("name_stop_words={:?}", name_stop_words);
+    // println!("city_stop_words={:?}", city_stop_words);
+    // println!("name_stop_words={:?}", name_stop_words);
 
     let mut token_to_person_list: HashMap<String, Vec<Rc<Person>>> = HashMap::new();
 
@@ -150,88 +153,98 @@ fn main() -> io::Result<()> {
         });
         // cmk is there a way to avoid cloning keys?
         for first_name in person.first_name_list.iter() {
+            if name_stop_words.contains(first_name) {
+                continue;
+            }
             token_to_person_list
                 .entry(first_name.clone())
                 .or_insert(Vec::new())
                 .push(person.clone());
         }
         for last_name in person.last_name_list.iter() {
+            if name_stop_words.contains(last_name) {
+                continue;
+            }
             token_to_person_list
                 .entry(last_name.clone())
                 .or_insert(Vec::new())
                 .push(person.clone());
         }
-        token_to_person_list
-            .entry(person.city.clone())
-            .or_insert(Vec::new())
-            .push(person.clone());
+
+        if !city_stop_words.contains(&person.city) {
+            token_to_person_list
+                .entry(person.city.clone())
+                .or_insert(Vec::new())
+                .push(person.clone());
+        }
     }
 
-    // // cmk inefficient
-    // let city_count = read_lines(results_file_name)?
-    //     .map(|result_line| {
-    //         let result_line = result_line.unwrap().to_ascii_uppercase();
-    //         result_line.contains(&city)
-    //     })
-    //     .filter(|x| *x)
-    //     .count();
-    // let city_by_coincidence = (city_count + 1) as f32 / (result_count + 2) as f32;
-
     // cmk kind of crazy inefficient to score lines that have no tokens in common with this member
-    for result_line in read_lines(results_file_name)?.take(1) {
-        let result_line = result_line?.to_ascii_uppercase();
-        let result_list = re.split(&result_line).collect::<Vec<_>>();
+    // cmk take 10
+    for (result_line, result_tokens) in read_lines(results_file_name)?.zip(results_as_tokens)
+    // .take(100)
+    {
+        let result_line = result_line?;
 
-        let person_set = result_list
+        let person_set = result_tokens
             .iter()
-            .filter_map(|token| token_to_person_list.get(*token))
+            .filter_map(|token| token_to_person_list.get(token))
             .flatten()
             .collect::<HashSet<_>>();
 
-        if !person_set.is_empty() {
-            println!("result_line={}", result_line);
-            println!("{:?}", result_list);
-            for person in person_set.iter() {
-                println!("person={:?}", person);
+        // if !person_set.is_empty() {
+        //     println!("result_line={}", result_line);
+        //     println!("{:?}", result_tokens);
+        //     for person in person_set.iter() {
+        //         println!("person={:?}", person);
+        //     }
+        // }
+
+        for person in person_set.iter() {
+            let contains_first_list: Vec<_> = person
+                .first_name_list
+                .iter()
+                .map(|first_name| result_tokens.contains(first_name))
+                .collect();
+            let contains_last_list: Vec<_> = person
+                .last_name_list
+                .iter()
+                .map(|last_name| result_tokens.contains(last_name))
+                .collect();
+            let contains_city = result_tokens.contains(&person.city);
+
+            let first_name_points = delta_many_names(
+                &contains_first_list,
+                &person.first_name_list,
+                &person.first_right_list,
+                &name_to_prob,
+            );
+
+            let last_name_points = delta_many_names(
+                &contains_last_list,
+                &person.last_name_list,
+                &person.last_right_list,
+                &name_to_prob,
+            );
+
+            let city_conincidence = city_to_coincidence
+                .get(&person.city)
+                .unwrap_or(&city_conincidence_default);
+
+            let city_name_points = delta_one(contains_city, *city_conincidence, total_right);
+
+            let post_points =
+                prior_points + first_name_points + last_name_points + city_name_points;
+
+            let post_prob = prob(post_points);
+
+            if post_prob > 0.5 {
+                println!(
+                    "{:?} {:?} {} {:.2} {post_prob:.2} {result_line}",
+                    person.first_name_list, person.last_name_list, person.city, post_points
+                );
             }
         }
-
-        // let contains_first_list: Vec<_> = first_name_list
-        //     .iter()
-        //     .map(|first_name| result_line.contains(first_name))
-        //     .collect();
-        // let contains_last_list: Vec<_> = last_name_list
-        //     .iter()
-        //     .map(|last_name| result_line.contains(last_name))
-        //     .collect();
-        // let contains_city = result_line.contains(&city);
-
-        // let first_name_points = delta_many_names(
-        //     &contains_first_list,
-        //     &first_name_list,
-        //     &first_right_list,
-        //     &name_to_prob,
-        // );
-
-        // let last_name_points = delta_many_names(
-        //     &contains_last_list,
-        //     &last_name_list,
-        //     &last_right_list,
-        //     &name_to_prob,
-        // );
-
-        // let city_name_points = delta_one(contains_city, city_by_coincidence, total_right);
-
-        // let post_points = prior_points + first_name_points + last_name_points + city_name_points;
-
-        // let post_prob = prob(post_points);
-
-        // if post_prob > 0.5 {
-        //     println!(
-        //         "{:?} {:?} {} {:.2} {post_prob:.2} {result_line}",
-        //         first_name_list, last_name_list, city, post_points
-        //     );
-        // }
     }
     Ok(())
 }

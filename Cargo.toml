@@ -6,8 +6,8 @@ edition = "2021"
 [lib]
 name = "race_results"
 
-
 [dependencies]
+anyinput = "0.1.6"
 
 [dev-dependencies]
 itertools = "0.10.5"
