@@ -48,6 +48,12 @@ impl PartialEq for Person {
     }
 }
 
+struct LinePeople {
+    line: String,
+    max_prob: f32,
+    person_prob_list: Vec<(Rc<Person>, f32)>,
+}
+
 fn main() -> io::Result<()> {
     // let sample_top = Path::new(r"C:\Users\carlk\OneDrive\Shares\RaceResults");
     // let members_file_name = sample_top.join("sample_members.tsv");
@@ -59,6 +65,7 @@ fn main() -> io::Result<()> {
     let total_right = 0.6f32;
     let name_to_prob = NameToProb::default();
     let stop_words_points = 3.0f32;
+    let threshold_probability = 0.01f32;
 
     let prob_member_in_race = 0.01;
 
@@ -181,6 +188,7 @@ fn main() -> io::Result<()> {
 
     // cmk kind of crazy inefficient to score lines that have no tokens in common with this member
     // cmk take 10
+    let mut line_people_list: Vec<LinePeople> = Vec::new();
     for (result_line, result_tokens) in read_lines(results_file_name)?.zip(results_as_tokens)
     // .take(100)
     {
@@ -200,7 +208,10 @@ fn main() -> io::Result<()> {
         //     }
         // }
 
+        // optional LinePeople
+        let mut line_people: Option<LinePeople> = None;
         for person in person_set.iter() {
+            let person = *person;
             let contains_first_list: Vec<_> = person
                 .first_name_list
                 .iter()
@@ -238,17 +249,45 @@ fn main() -> io::Result<()> {
 
             let post_prob = prob(post_points);
 
-            if post_prob > 0.5 {
-                println!(
-                    "{:?} {:?} {} {:.2} {post_prob:.2} {result_line}",
-                    person.first_name_list, person.last_name_list, person.city, post_points
-                );
+            if post_prob > threshold_probability {
+                // println!(
+                //     "{:?} {:?} {} {:.2} {post_prob:.2} {result_line}",
+                //     person.first_name_list, person.last_name_list, person.city, post_points
+                // );
+                if let Some(line_people) = &mut line_people {
+                    line_people.max_prob = line_people.max_prob.max(post_prob);
+                    line_people
+                        .person_prob_list
+                        .push((person.clone(), post_prob));
+                } else {
+                    line_people = Some(LinePeople {
+                        line: result_line.clone(),
+                        max_prob: post_prob,
+                        person_prob_list: vec![(person.clone(), post_prob)],
+                    });
+                }
             }
+        }
+        if let Some(line_people) = line_people {
+            line_people_list.push(line_people);
+        }
+    }
+
+    // Sort by max_prob
+    line_people_list.sort_by(|a, b| b.max_prob.partial_cmp(&a.max_prob).unwrap());
+    for line_people in line_people_list.iter() {
+        println!("{}", line_people.line);
+        let mut person_prob_list = line_people.person_prob_list.clone();
+        // sort by prob
+        person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        for (person, prob) in person_prob_list.iter() {
+            println!(
+                "  {:?} {:?} {} {:.2}",
+                person.first_name_list, person.last_name_list, person.city, prob
+            );
         }
     }
     Ok(())
 }
 
-// cmk0 ING matches TUSING
 // cmk0 city: MILL CREEK should be treated like 1st name and last name but the number of names varies and the concidence is different.
-// cmk0 only match tokens on rare cities, no the very, very common ones.
