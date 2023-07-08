@@ -27,16 +27,9 @@ fn main() -> io::Result<()> {
     // let result_no_city = sample_top.join("sample_results_nocity.txt");
     let members_file_name = r"C:\Users\carlk\OneDrive\programs\MemberMatch\ESRMembers2012Dec.txt";
     let results_file_name = r"M:\projects\member_match\carnation2023results.txt";
-    let re = Regex::new(r"[\-/ &]").unwrap();
+    let re = Regex::new(r"[\-/ &]+").unwrap();
     let total_right = 0.6f32;
     let name_to_prob = NameToProb::default();
-    // let min_prob: f32 = name_to_prob
-    //     .values()
-    //     .cloned()
-    //     .reduce(|a, b| a.min(b))
-    //     .unwrap();
-
-    // let name_to_prob_fn = |name: &str| *name_to_prob.get(name).unwrap_or(&min_prob);
 
     let prob_member_in_race = 0.01;
     let result_count = read_lines(results_file_name)?.count();
@@ -109,12 +102,6 @@ fn main() -> io::Result<()> {
                 &name_to_prob,
             );
 
-            //     let last_name_points =
-            //         delta_one_name(contains_last, &person.last_name, prob_right, &name_to_prob);
-
-            //     println!("last_name: {:.2} points", last_name_points);
-
-            //     let city_by_coincidence = (170 + 1) as f32 / (result_count + 2) as f32;
             let city_name_points = delta_one(contains_city, city_by_coincidence, total_right);
 
             let post_points =
@@ -122,13 +109,15 @@ fn main() -> io::Result<()> {
 
             let post_prob = prob(post_points);
 
-            if post_prob > 0.05 {
+            if post_prob > 0.5 {
                 println!(
-                    "{} {} {} {:.2} {result_line}",
-                    first_name, last_name, city, post_points
+                    "{:?} {:?} {} {:.2} {post_prob:.2} {result_line}",
+                    first_name_list, last_name_list, city, post_points
                 );
             }
         }
     }
     Ok(())
 }
+
+// cmk0 ING matches TUSING
