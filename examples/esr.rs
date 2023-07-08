@@ -58,6 +58,7 @@ fn main() -> io::Result<()> {
     let re = Regex::new(r"[\-/ &\t]+").unwrap();
     let total_right = 0.6f32;
     let name_to_prob = NameToProb::default();
+    let stop_words_points = 3.0f32;
 
     let prob_member_in_race = 0.01;
 
@@ -71,7 +72,7 @@ fn main() -> io::Result<()> {
                 .map(|s| s.to_owned())
                 .filter(|token| !token.is_empty() && !token.chars().any(|c| c.is_ascii_digit()))
                 .collect();
-            println!("token_set={:?}", token_set);
+            // println!("token_set={:?}", token_set);
             token_set
         })
         .collect();
@@ -89,18 +90,27 @@ fn main() -> io::Result<()> {
                 acc
             });
 
-    // print top 100 tokens
     let mut result_token_to_line_count_vec: Vec<_> = result_token_to_line_count.iter().collect();
     result_token_to_line_count_vec.sort_by_key(|(_token, count)| -**count);
-    for (token, count) in result_token_to_line_count_vec.iter().take(100) {
+    let mut city_stop_words = HashSet::<String>::new();
+    let mut name_stop_words = HashSet::<String>::new();
+    for (token, count) in result_token_to_line_count_vec.iter() {
         // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
         let city_conincidence = (*count + 1) as f32 / (result_count + 2) as f32;
         let city_points_contains = delta_one(true, city_conincidence, total_right);
         let city_points_absent = delta_one(false, city_conincidence, total_right);
         let name_points_contains = delta_one_name(true, token, total_right, &name_to_prob);
         let name_points_absent = delta_one_name(false, token, total_right, &name_to_prob);
-        println!("{token}\t{count}\t{city_points_contains:.2}\t{city_points_absent:.2}\t{name_points_contains:.2}\t{name_points_absent:.2}");
+        // println!("{token}\t{count}\t{city_points_contains:.2}\t{city_points_absent:.2}\t{name_points_contains:.2}\t{name_points_absent:.2}");
+        if city_points_contains < stop_words_points {
+            city_stop_words.insert(token.to_string());
+        }
+        if name_points_contains < stop_words_points {
+            name_stop_words.insert(token.to_string());
+        }
     }
+    println!("city_stop_words={:?}", city_stop_words);
+    println!("name_stop_words={:?}", name_stop_words);
 
     let mut token_to_person_list: HashMap<String, Vec<Rc<Person>>> = HashMap::new();
 
