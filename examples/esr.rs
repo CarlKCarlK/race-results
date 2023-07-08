@@ -60,14 +60,45 @@ fn main() -> io::Result<()> {
     let name_to_prob = NameToProb::default();
 
     let prob_member_in_race = 0.01;
-    let result_count = read_lines(results_file_name)?.count();
+
+    // For ever token, in the results, find what fraction of the lines it occurs in (with smoothing).
+    // (If a token is too common, we will not use it for initial matching.)
+    let results_as_tokens: Vec<HashSet<String>> = read_lines(results_file_name)?
+        .map(|result_line| {
+            let result_line = result_line.unwrap().to_ascii_uppercase();
+            let token_set: HashSet<String> = re
+                .split(&result_line)
+                .map(|s| s.to_owned())
+                .filter(|token| !token.is_empty() && !token.chars().any(|c| c.is_ascii_digit()))
+                .collect();
+            println!("token_set={:?}", token_set);
+            token_set
+        })
+        .collect();
+
+    let result_count = results_as_tokens.len();
     let prior_prob = prob_member_in_race / result_count as f32;
     let prior_points = log_odds(prior_prob);
 
+    let result_token_to_line_count =
+        results_as_tokens
+            .iter()
+            .flatten()
+            .fold(HashMap::new(), |mut acc, token| {
+                *acc.entry(token.clone()).or_insert(0) += 1;
+                acc
+            });
+
+    // print top 100 tokens
+    let mut result_token_to_line_count_vec: Vec<_> = result_token_to_line_count.iter().collect();
+    result_token_to_line_count_vec.sort_by_key(|(_token, count)| -**count);
+    for (token, count) in result_token_to_line_count_vec.iter().take(100) {
+        println!("{} {}", token, count);
+    }
+
     let mut token_to_person_list: HashMap<String, Vec<Rc<Person>>> = HashMap::new();
 
-    let mut id = 0usize;
-    for member_list in read_lines(members_file_name)? {
+    for (id, member_list) in (read_lines(members_file_name)?).enumerate() {
         let line = member_list?;
         let (first_name, last_name, city) = line.split('\t').collect_tuple().unwrap();
         let first_name = first_name.to_uppercase();
@@ -101,7 +132,6 @@ fn main() -> io::Result<()> {
             city,
             id,
         });
-        id += 1;
         // cmk is there a way to avoid cloning keys?
         for first_name in person.first_name_list.iter() {
             token_to_person_list
