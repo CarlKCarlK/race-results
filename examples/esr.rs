@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use race_results::{delta_many_names, delta_one, log_odds, prob, NameToProb};
+use race_results::{delta_many_names, delta_one, delta_one_name, log_odds, prob, NameToProb};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -93,7 +93,13 @@ fn main() -> io::Result<()> {
     let mut result_token_to_line_count_vec: Vec<_> = result_token_to_line_count.iter().collect();
     result_token_to_line_count_vec.sort_by_key(|(_token, count)| -**count);
     for (token, count) in result_token_to_line_count_vec.iter().take(100) {
-        println!("{} {}", token, count);
+        // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
+        let city_conincidence = (*count + 1) as f32 / (result_count + 2) as f32;
+        let city_points_contains = delta_one(true, city_conincidence, total_right);
+        let city_points_absent = delta_one(false, city_conincidence, total_right);
+        let name_points_contains = delta_one_name(true, token, total_right, &name_to_prob);
+        let name_points_absent = delta_one_name(false, token, total_right, &name_to_prob);
+        println!("{token}\t{count}\t{city_points_contains:.2}\t{city_points_absent:.2}\t{name_points_contains:.2}\t{name_points_absent:.2}");
     }
 
     let mut token_to_person_list: HashMap<String, Vec<Rc<Person>>> = HashMap::new();
