@@ -34,7 +34,7 @@ pub fn delta_many_names(
     delta_many(contains_list, &prob_coincidence_list, prob_right_list)
 }
 
-fn delta_many(
+pub fn delta_many(
     contains_list: &[bool],
     prob_coincidence_list: &[f32],
     prob_right_list: &[f32],

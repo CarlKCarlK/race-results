@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use race_results::{delta_many_names, delta_one, delta_one_name, log_odds, prob, NameToProb};
+use race_results::{delta_many, delta_one, delta_one_name, log_odds, prob, NameToProb};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -12,7 +12,8 @@ fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io::Re
     Ok(BufReader::new(File::open(path)?).lines())
 }
 
-fn split_name(name: &str, total_right: f32, re: &Regex) -> (Vec<String>, Vec<f32>) {
+// cmk move to Dist
+fn split_name(name: &str, total_right: f32, re: &Regex) -> Dist {
     let name_list = re.split(name).map(|s| s.to_owned()).collect::<Vec<_>>();
     // Create a vector called right_list with the same length as name_list and with values = total_right/name_list.len()
     let right_list = name_list
@@ -20,16 +21,55 @@ fn split_name(name: &str, total_right: f32, re: &Regex) -> (Vec<String>, Vec<f32
         .map(|_| total_right / name_list.len() as f32)
         .collect_vec();
 
-    (name_list, right_list)
+    Dist {
+        token_and_prob: name_list.into_iter().zip(right_list).collect_vec(),
+    }
+}
+
+#[derive(Debug)]
+struct Dist {
+    token_and_prob: Vec<(String, f32)>,
+}
+
+impl Dist {
+    // cmk return an iterator of &str
+    fn tokens(&self) -> Vec<String> {
+        self.token_and_prob
+            .iter()
+            .map(|(token, _prob)| token.clone())
+            .collect_vec()
+    }
+
+    // cmk return an iterator of f32
+    fn probs(&self) -> Vec<f32> {
+        self.token_and_prob
+            .iter()
+            .map(|(_token, prob)| *prob)
+            .collect_vec()
+    }
+
+    fn delta_names(&self, contains_list: &[bool], name_to_prob: &NameToProb) -> f32 {
+        // cmk what if not found?
+        // cmk why bother with collect?
+        let prob_coincidence_list: Vec<_> = self
+            .tokens()
+            .iter()
+            .map(|name| name_to_prob.prob(name.as_ref()))
+            .collect();
+        // cmk merge delta_many code to here
+        delta_many(contains_list, &prob_coincidence_list, &self.probs())
+    }
 }
 
 // cmk which is it a Person and a Member?
 #[derive(Debug)]
 struct Person {
-    first_name_list: Vec<String>,
-    first_right_list: Vec<f32>,
-    last_name_list: Vec<String>,
-    last_right_list: Vec<f32>,
+    first_dist: Dist,
+    last_dist: Dist,
+    // first_name_list: Vec<String>,
+    // first_right_list: Vec<f32>,
+    // last_name_list: Vec<String>,
+    // last_right_list: Vec<f32>,
     city: String,
     id: usize,
 }
@@ -131,11 +171,11 @@ fn main() -> io::Result<()> {
         let last_name = last_name.to_uppercase();
         let city = city.to_uppercase();
 
-        let (first_name_list, first_right_list) = split_name(&first_name, total_right, &re);
-        let (last_name_list, last_right_list) = split_name(&last_name, total_right, &re);
+        let first_dist = split_name(&first_name, total_right, &re);
+        let last_dist = split_name(&last_name, total_right, &re);
 
         // cmk assert that every first_name_list, last_name, city contains only A-Z
-        for item in first_name_list.iter().chain(last_name_list.iter()) {
+        for item in first_dist.tokens().iter().chain(last_dist.tokens().iter()) {
             for c in item.chars() {
                 assert!(
                     c.is_ascii_alphabetic() || c == '.' || c == '\'',
@@ -151,15 +191,13 @@ fn main() -> io::Result<()> {
         }
 
         let person = Rc::new(Person {
-            first_name_list,
-            first_right_list,
-            last_name_list,
-            last_right_list,
+            first_dist,
+            last_dist,
             city,
             id,
         });
         // cmk is there a way to avoid cloning keys?
-        for first_name in person.first_name_list.iter() {
+        for first_name in person.first_dist.tokens().iter() {
             if name_stop_words.contains(first_name) {
                 continue;
             }
@@ -168,7 +206,7 @@ fn main() -> io::Result<()> {
                 .or_insert(Vec::new())
                 .push(person.clone());
         }
-        for last_name in person.last_name_list.iter() {
+        for last_name in person.last_dist.tokens().iter() {
             if name_stop_words.contains(last_name) {
                 continue;
             }
@@ -213,30 +251,26 @@ fn main() -> io::Result<()> {
         for person in person_set.iter() {
             let person = *person;
             let contains_first_list: Vec<_> = person
-                .first_name_list
+                .first_dist
+                .tokens()
                 .iter()
                 .map(|first_name| result_tokens.contains(first_name))
                 .collect();
             let contains_last_list: Vec<_> = person
-                .last_name_list
+                .last_dist
+                .tokens()
                 .iter()
                 .map(|last_name| result_tokens.contains(last_name))
                 .collect();
             let contains_city = result_tokens.contains(&person.city);
 
-            let first_name_points = delta_many_names(
-                &contains_first_list,
-                &person.first_name_list,
-                &person.first_right_list,
-                &name_to_prob,
-            );
+            let first_name_points = person
+                .first_dist
+                .delta_names(&contains_first_list, &name_to_prob);
 
-            let last_name_points = delta_many_names(
-                &contains_last_list,
-                &person.last_name_list,
-                &person.last_right_list,
-                &name_to_prob,
-            );
+            let last_name_points = person
+                .last_dist
+                .delta_names(&contains_last_list, &name_to_prob);
 
             let city_conincidence = city_to_coincidence
                 .get(&person.city)
@@ -283,7 +317,10 @@ fn main() -> io::Result<()> {
         for (person, prob) in person_prob_list.iter() {
             println!(
                 "  {:?} {:?} {} {:.2}",
-                person.first_name_list, person.last_name_list, person.city, prob
+                person.first_dist.tokens(),
+                person.last_dist.tokens(),
+                person.city,
+                prob
             );
         }
     }
