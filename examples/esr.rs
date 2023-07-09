@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{self, BufRead, BufReader};
+use std::iter::repeat;
 use std::path::Path;
 use std::rc::Rc;
 use std::vec;
@@ -36,16 +37,61 @@ impl Dist {
     }
 
     // cmk shouldn't have to pass in the re
-    fn split_name(name: &str, total_right: f32, re: &Regex) -> Self {
-        let name_list = re.split(name).map(|s| s.to_owned()).collect::<Vec<_>>();
-        // Create a vector called right_list with the same length as name_list and with values = total_right/name_list.len()
-        let right_list = name_list
+    fn split_token(
+        name: &str,
+        total_right: f32,
+        re: &Regex,
+        token_to_nickname_set: &HashMap<String, HashSet<String>>,
+        total_nickname: f32,
+    ) -> Self {
+        assert!(
+            total_nickname <= total_right / 2.0,
+            "Expect total nickname to be <= than half total_right"
+        );
+        assert!(
+            (0.0..=1.0).contains(&total_right),
+            "Expect total_right to be between 0 and 1"
+        );
+        assert!(
+            (0.0..=1.0).contains(&total_nickname),
+            "Expect total_nickname to be between 0 and 1"
+        );
+        let main_set = re.split(name).map(|s| s.to_owned()).collect::<HashSet<_>>();
+        // cmk test that if a nickname is in the main set, it's not in the nickname set
+        let nickname_set: HashSet<_> = main_set
             .iter()
-            .map(|_| total_right / name_list.len() as f32)
+            .filter_map(|token| token_to_nickname_set.get(token))
+            .flat_map(|nickname_set| nickname_set.iter().cloned())
+            .filter(|nickname| !main_set.contains(nickname))
+            .collect();
+
+        let mut each_main: f32;
+        let mut each_nickname: f32;
+        // cmk test each path
+        if nickname_set.is_empty() {
+            each_main = total_right / main_set.len() as f32;
+            each_nickname = 0.0;
+        } else {
+            each_main = (total_right - total_nickname) / main_set.len() as f32;
+            each_nickname = total_nickname / nickname_set.len() as f32;
+            if each_main < each_nickname {
+                each_main = total_right / (main_set.len() + nickname_set.len()) as f32;
+                each_nickname = each_main;
+            }
+        }
+
+        let token_list = main_set
+            .iter()
+            .chain(nickname_set.iter())
+            .cloned()
+            .collect_vec();
+        let right_list = repeat(each_main)
+            .take(main_set.len())
+            .chain(repeat(each_nickname).take(nickname_set.len()))
             .collect_vec();
 
         let dist = Dist {
-            token_and_prob: name_list.into_iter().zip(right_list).collect_vec(),
+            token_and_prob: token_list.into_iter().zip(right_list).collect_vec(),
         };
 
         // cmk it doesn't make sense to pull out the strings when we had them earlier
@@ -153,6 +199,7 @@ fn main() -> io::Result<()> {
     // cmk there should be a tokenize struct, etc.
     let prob_member_in_race = 0.01;
     let total_right = 0.6f32;
+    let total_nickname = 0.1f32;
     let name_to_coincidence = TokenToCoincidence::default_names();
     let stop_words_points = 3.0f32;
     let threshold_probability = 0.01f32;
@@ -160,6 +207,8 @@ fn main() -> io::Result<()> {
     let re = Regex::new(r"[\-/ &\t]+").unwrap();
 
     let mut name_to_nickname_set = HashMap::<String, HashSet<String>>::new();
+    // cmk add something to this???
+    let city_to_nickname_set = HashMap::<String, HashSet<String>>::new();
     for nickname_line in read_lines(nicknames_file_name)? {
         let nickname_line = nickname_line?;
         // expect one tab
@@ -203,7 +252,7 @@ fn main() -> io::Result<()> {
             }
         }
     }
-    println!("name_to_nickname_set={:?}", name_to_nickname_set);
+    // println!("name_to_nickname_set={:?}", name_to_nickname_set);
 
     // For ever token, in the results, find what fraction of the lines it occurs in (with smoothing).
     // (If a token is too common, we will not use it for initial matching.)
@@ -274,14 +323,34 @@ fn main() -> io::Result<()> {
         let last_name = last_name.to_uppercase();
         let city = city.to_uppercase();
 
-        let first_dist = Dist::split_name(&first_name, total_right, &re);
-        let last_dist = Dist::split_name(&last_name, total_right, &re);
+        let first_dist = Dist::split_token(
+            &first_name,
+            total_right,
+            &re,
+            &name_to_nickname_set,
+            total_nickname,
+        );
+        let last_dist = Dist::split_token(
+            &last_name,
+            total_right,
+            &re,
+            &name_to_nickname_set,
+            total_nickname,
+        );
         let name_dist_list = vec![first_dist, last_dist];
 
         // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
         let city_dist_list = city
             .split_ascii_whitespace()
-            .map(|city| Dist::split_name(city, total_right, &re))
+            .map(|city| {
+                Dist::split_token(
+                    city,
+                    total_right,
+                    &re,
+                    &city_to_nickname_set,
+                    total_nickname,
+                )
+            })
             .collect();
 
         let person = Rc::new(Person {
@@ -373,8 +442,9 @@ fn main() -> io::Result<()> {
         person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         for (person, prob) in person_prob_list.iter() {
             println!(
-                "  {:?} {:?} {:.2}",
+                "   {:.2} {:?} {:?}",
                 // cmk if this is useful, make it a method
+                prob,
                 person
                     .name_dist_list
                     .iter()
@@ -386,7 +456,6 @@ fn main() -> io::Result<()> {
                     .iter()
                     .map(|city_dist| city_dist.tokens())
                     .collect_vec(),
-                prob
             );
         }
     }
