@@ -14,6 +14,7 @@ fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io::Re
 }
 
 // cmk move to Dist
+// cmk shouldn't have to pass in the re
 fn split_name(name: &str, total_right: f32, re: &Regex) -> Dist {
     let name_list = re.split(name).map(|s| s.to_owned()).collect::<Vec<_>>();
     // Create a vector called right_list with the same length as name_list and with values = total_right/name_list.len()
@@ -22,9 +23,23 @@ fn split_name(name: &str, total_right: f32, re: &Regex) -> Dist {
         .map(|_| total_right / name_list.len() as f32)
         .collect_vec();
 
-    Dist {
+    let dist = Dist {
         token_and_prob: name_list.into_iter().zip(right_list).collect_vec(),
+    };
+
+    // cmk it doesn't make sense to pull out the strings when we had them earlier
+    // cmk should return an error rather than panic
+    // cmk assert that every first_name_list, last_name, city contains only A-Z cmk update
+    for item in dist.tokens().iter() {
+        for c in item.chars() {
+            assert!(
+                c.is_ascii_alphabetic() || c == '.' || c == '\'',
+                "bad char in {:?}",
+                item
+            );
+        }
     }
+    dist
 }
 
 #[derive(Debug)]
@@ -137,6 +152,7 @@ fn main() -> io::Result<()> {
     // let result_no_city = sample_top.join("sample_results_nocity.txt");
     let members_file_name = r"C:\Users\carlk\OneDrive\programs\MemberMatch\ESRMembers2012Dec.txt";
     let results_file_name = r"M:\projects\member_match\carnation2023results.txt";
+    // cmk there should be a tokenize struct, etc.
     let re = Regex::new(r"[\-/ &\t]+").unwrap();
     let total_right = 0.6f32;
     let name_to_coincidence = TokenToCoincidence::default_names();
@@ -216,28 +232,14 @@ fn main() -> io::Result<()> {
 
         let first_dist = split_name(&first_name, total_right, &re);
         let last_dist = split_name(&last_name, total_right, &re);
-
-        // cmk assert that every first_name_list, last_name, city contains only A-Z
-        for item in first_dist.tokens().iter().chain(last_dist.tokens().iter()) {
-            for c in item.chars() {
-                assert!(
-                    c.is_ascii_alphabetic() || c == '.' || c == '\'',
-                    "bad char in {:?}",
-                    item
-                );
-            }
-        }
-        for c in city.chars() {
-            if !(c.is_ascii_alphabetic() || c == ' ') {
-                panic!("{}", format!("ascii={}, bad char in {:?}", c as u32, city));
-            }
-        }
-
         let name_dist_list = vec![first_dist, last_dist];
-        let city_dist = Dist {
-            token_and_prob: vec![(city.clone(), total_right)],
-        };
-        let city_dist_list: Vec<Dist> = vec![city_dist];
+
+        // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
+        let city_dist_list = city
+            .split_ascii_whitespace()
+            .map(|city| split_name(city, total_right, &re))
+            .collect();
+
         let person = Rc::new(Person {
             name_dist_list,
             city_dist_list,
