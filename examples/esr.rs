@@ -49,30 +49,17 @@ impl Dist {
             .collect_vec()
     }
 
-    fn delta_names(&self, contains_list: &[bool], name_to_prob: &TokenToCoincidence) -> f32 {
-        // cmk what if not found?
-        // cmk why bother with collect?
-        let prob_coincidence_list: Vec<_> = self
-            .tokens()
-            .iter()
-            .map(|name| name_to_prob.prob(name.as_ref()))
-            .collect();
-        // cmk merge delta_many code to here
-        delta_many(contains_list, &prob_coincidence_list, &self.probs())
-    }
-
-    // cmk0 make city_to_coincidence a struct
-    fn delta_cities(
+    fn delta_tokens(
         &self,
         contains_list: &[bool],
-        city_to_coincidence: &TokenToCoincidence,
+        token_to_coincidence: &TokenToCoincidence,
     ) -> f32 {
         // cmk what if not found?
         // cmk why bother with collect?
         let prob_coincidence_list: Vec<_> = self
             .tokens()
             .iter()
-            .map(|city| city_to_coincidence.prob(city.as_ref()))
+            .map(|token| token_to_coincidence.prob(token.as_ref()))
             .collect();
         // cmk merge delta_many code to here
         delta_many(contains_list, &prob_coincidence_list, &self.probs())
@@ -282,7 +269,7 @@ fn main() -> io::Result<()> {
                         .iter()
                         .map(|name| result_tokens.contains(name))
                         .collect();
-                    name_dist.delta_names(&contains_list, &name_to_conincidence)
+                    name_dist.delta_tokens(&contains_list, &name_to_conincidence)
                 })
                 .sum();
 
@@ -297,7 +284,7 @@ fn main() -> io::Result<()> {
                         .iter()
                         .map(|city| result_tokens.contains(city))
                         .collect();
-                    city_dist.delta_cities(&contains_list, &city_to_coincidence)
+                    city_dist.delta_tokens(&contains_list, &city_to_coincidence)
                 })
                 .sum();
 
