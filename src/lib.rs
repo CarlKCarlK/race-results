@@ -2,8 +2,6 @@
 
 use std::collections::HashMap;
 use std::f32::consts::E;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 
 use anyinput::anyinput;
 
@@ -84,14 +82,13 @@ pub struct TokenToCoincidence {
     pub default: f32,
 }
 
+const NAME_TO_PROB_STR: &str =
+    include_str!(r"C:\Users\carlk\OneDrive\Shares\RaceResults\name_probability.tsv");
+
 impl TokenToCoincidence {
     pub fn default_names() -> Self {
-        let name_prob_file =
-            File::open(r"C:\Users\carlk\OneDrive\Shares\RaceResults\name_probability.tsv").unwrap();
-        let reader = BufReader::new(name_prob_file);
         let mut name_to_conincidence = HashMap::new();
-        for line in reader.lines().skip(1) {
-            let line = line.unwrap();
+        for line in NAME_TO_PROB_STR.lines().skip(1) {
             let parts: Vec<&str> = line.split('\t').collect();
             let name = parts[0].to_string();
             let prob = parts[1].parse::<f32>().unwrap();

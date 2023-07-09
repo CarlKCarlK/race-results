@@ -14,6 +14,8 @@ fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io::Re
     Ok(BufReader::new(File::open(path)?).lines())
 }
 
+const NICKNAMES_STR: &str = include_str!("nicknames.txt");
+
 #[derive(Debug)]
 struct Dist {
     token_and_prob: Vec<(String, f32)>,
@@ -194,8 +196,6 @@ fn main() -> io::Result<()> {
     // let result_no_city = sample_top.join("sample_results_nocity.txt");
     let members_file_name = r"C:\Users\carlk\OneDrive\programs\MemberMatch\ESRMembers2012Dec.txt";
     let results_file_name = r"M:\projects\member_match\carnation2023results.txt";
-    let nicknames_file_name =
-        r"C:\Users\carlk\OneDrive\programs\RaceResults\race-results\examples\nicknames.txt";
     // cmk there should be a tokenize struct, etc.
     let prob_member_in_race = 0.01;
     let total_right = 0.6f32;
@@ -209,8 +209,7 @@ fn main() -> io::Result<()> {
     let mut name_to_nickname_set = HashMap::<String, HashSet<String>>::new();
     // cmk add something to this???
     let city_to_nickname_set = HashMap::<String, HashSet<String>>::new();
-    for nickname_line in read_lines(nicknames_file_name)? {
-        let nickname_line = nickname_line?;
+    for nickname_line in NICKNAMES_STR.lines() {
         // expect one tab
         let left;
         let right;
@@ -317,7 +316,7 @@ fn main() -> io::Result<()> {
     for (id, member_list) in (read_lines(members_file_name)?).enumerate() {
         let line = member_list?;
 
-        // cmk0 treat first and last more uniformly
+        // cmk treat first and last more uniformly
         let (first_name, last_name, city) = line.split('\t').collect_tuple().unwrap();
         let first_name = first_name.to_uppercase();
         let last_name = last_name.to_uppercase();

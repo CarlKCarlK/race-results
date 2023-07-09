@@ -12,3 +12,9 @@ anyinput = "0.1.6"
 [dev-dependencies]
 itertools = "0.10.5"
 regex = "1.8.4"
+
+[profile.release]
+debug = false
+opt-level = "z"
+lto = true
+codegen-units = 1
