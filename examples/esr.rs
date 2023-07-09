@@ -155,7 +155,7 @@ fn main() -> io::Result<()> {
         let city_points_contains = delta_one(true, city_conincidence, total_right);
         let name_points_contains = delta_one_name(true, token, total_right, &name_to_conincidence);
         // let city_points_absent = delta_one(false, city_conincidence, total_right);
-        // let name_points_absent = delta_one_name(false, token, total_right, &name_to_prob);
+        // let name_points_absent = delta_one_name(false, token, total_right, &name_to_conincidence);
         // println!("{token}\t{count}\t{city_points_contains:.2}\t{city_points_absent:.2}\t{name_points_contains:.2}\t{name_points_absent:.2}");
         if city_points_contains < stop_words_points {
             city_stop_words.insert(token.to_string());
@@ -259,34 +259,31 @@ fn main() -> io::Result<()> {
         for person in person_set.iter() {
             let person = *person;
 
-            let name_points_sum: f32 = person
-                .name_dist_list
-                .iter()
-                .map(|name_dist| {
-                    // cmk combine these lines
-                    let contains_list: Vec<_> = name_dist
-                        .tokens()
-                        .iter()
-                        .map(|name| result_tokens.contains(name))
-                        .collect();
-                    name_dist.delta_tokens(&contains_list, &name_to_conincidence)
-                })
-                .sum();
+            fn calculate_points(
+                dist_list: &[Dist],
+                result_tokens: &HashSet<String>,
+                to_coincidence: &TokenToCoincidence,
+            ) -> f32 {
+                dist_list
+                    .iter()
+                    .map(|dist| {
+                        let contains_list: Vec<_> = dist
+                            .tokens()
+                            .iter()
+                            .map(|token| result_tokens.contains(token))
+                            .collect();
+                        dist.delta_tokens(&contains_list, to_coincidence)
+                    })
+                    .sum()
+            }
 
-            // cmk should name_to_prob and city_to_coincidence both be _prob or _coincidence?
-            let city_points_sum: f32 = person
-                .city_dist_list
-                .iter()
-                .map(|city_dist| {
-                    // cmk combine these lines
-                    let contains_list: Vec<_> = city_dist
-                        .tokens()
-                        .iter()
-                        .map(|city| result_tokens.contains(city))
-                        .collect();
-                    city_dist.delta_tokens(&contains_list, &city_to_coincidence)
-                })
-                .sum();
+            let name_points_sum = calculate_points(
+                &person.name_dist_list,
+                &result_tokens,
+                &name_to_conincidence,
+            );
+            let city_points_sum =
+                calculate_points(&person.city_dist_list, &result_tokens, &city_to_coincidence);
 
             let post_points = prior_points + name_points_sum + city_points_sum;
 

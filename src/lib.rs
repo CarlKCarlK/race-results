@@ -11,10 +11,10 @@ pub fn delta_one_name(
     contains: bool,
     name: &str,
     prob_right: f32,
-    name_to_prob: &TokenToCoincidence,
+    name_to_conincidence: &TokenToCoincidence,
 ) -> f32 {
     // cmk what if not found?
-    let prob_coincidence = name_to_prob.prob(name);
+    let prob_coincidence = name_to_conincidence.prob(name);
     delta_one(contains, prob_coincidence, prob_right)
 }
 
@@ -23,13 +23,13 @@ pub fn delta_many_names(
     contains_list: &[bool],
     name_list: AnyArray<AnyString>,
     prob_right_list: &[f32],
-    name_to_prob: &TokenToCoincidence,
+    name_to_conincidence: &TokenToCoincidence,
 ) -> f32 {
     // cmk what if not found?
     // cmk why bother with collect?
     let prob_coincidence_list: Vec<_> = name_list
         .iter()
-        .map(|name| name_to_prob.prob(name.as_ref()))
+        .map(|name| name_to_conincidence.prob(name.as_ref()))
         .collect();
     delta_many(contains_list, &prob_coincidence_list, prob_right_list)
 }
@@ -89,20 +89,20 @@ impl TokenToCoincidence {
         let name_prob_file =
             File::open(r"C:\Users\carlk\OneDrive\Shares\RaceResults\name_probability.tsv").unwrap();
         let reader = BufReader::new(name_prob_file);
-        let mut name_to_prob = HashMap::new();
+        let mut name_to_conincidence = HashMap::new();
         for line in reader.lines().skip(1) {
             let line = line.unwrap();
             let parts: Vec<&str> = line.split('\t').collect();
             let name = parts[0].to_string();
             let prob = parts[1].parse::<f32>().unwrap();
-            name_to_prob.insert(name, prob);
+            name_to_conincidence.insert(name, prob);
         }
-        let min_prob = *name_to_prob
+        let min_prob = *name_to_conincidence
             .values()
             .min_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap();
         Self {
-            token_to_prob: name_to_prob,
+            token_to_prob: name_to_conincidence,
             default: min_prob,
         }
     }
