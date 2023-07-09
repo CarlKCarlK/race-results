@@ -74,6 +74,42 @@ struct Person {
     id: usize,
 }
 
+impl Person {
+    fn points(
+        dist_list: &[Dist],
+        result_tokens: &HashSet<String>,
+        to_coincidence: &TokenToCoincidence,
+    ) -> f32 {
+        dist_list
+            .iter()
+            .map(|dist| {
+                let contains_list: Vec<_> = dist
+                    .tokens()
+                    .iter()
+                    .map(|token| result_tokens.contains(token))
+                    .collect();
+                dist.delta_tokens(&contains_list, to_coincidence)
+            })
+            .sum()
+    }
+
+    pub fn name_points(
+        &self,
+        result_tokens: &HashSet<String>,
+        name_to_coincidence: &TokenToCoincidence,
+    ) -> f32 {
+        Person::points(&self.name_dist_list, result_tokens, name_to_coincidence)
+    }
+
+    pub fn city_points(
+        &self,
+        result_tokens: &HashSet<String>,
+        city_to_coincidence: &TokenToCoincidence,
+    ) -> f32 {
+        Person::points(&self.city_dist_list, result_tokens, city_to_coincidence)
+    }
+}
+
 impl Hash for Person {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id.hash(state);
@@ -103,7 +139,7 @@ fn main() -> io::Result<()> {
     let results_file_name = r"M:\projects\member_match\carnation2023results.txt";
     let re = Regex::new(r"[\-/ &\t]+").unwrap();
     let total_right = 0.6f32;
-    let name_to_conincidence = TokenToCoincidence::default_names();
+    let name_to_coincidence = TokenToCoincidence::default_names();
     let stop_words_points = 3.0f32;
     let threshold_probability = 0.01f32;
 
@@ -127,7 +163,7 @@ fn main() -> io::Result<()> {
     let result_count = results_as_tokens.len();
     let prior_prob = prob_member_in_race / result_count as f32;
     let prior_points = log_odds(prior_prob);
-    let city_conincidence_default = 1f32 / (result_count + 2) as f32;
+    let city_coincidence_default = 1f32 / (result_count + 2) as f32;
 
     let result_token_to_line_count =
         results_as_tokens
@@ -144,18 +180,18 @@ fn main() -> io::Result<()> {
     let mut name_stop_words = HashSet::<String>::new();
     let mut city_to_coincidence = TokenToCoincidence {
         token_to_prob: HashMap::new(),
-        default: city_conincidence_default,
+        default: city_coincidence_default,
     };
     for (token, count) in result_token_to_line_count_vec.iter() {
         // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
-        let city_conincidence = (*count + 1) as f32 / (result_count + 2) as f32;
+        let city_coincidence = (*count + 1) as f32 / (result_count + 2) as f32;
         city_to_coincidence
             .token_to_prob
-            .insert(token.to_string(), city_conincidence);
-        let city_points_contains = delta_one(true, city_conincidence, total_right);
-        let name_points_contains = delta_one_name(true, token, total_right, &name_to_conincidence);
-        // let city_points_absent = delta_one(false, city_conincidence, total_right);
-        // let name_points_absent = delta_one_name(false, token, total_right, &name_to_conincidence);
+            .insert(token.to_string(), city_coincidence);
+        let city_points_contains = delta_one(true, city_coincidence, total_right);
+        let name_points_contains = delta_one_name(true, token, total_right, &name_to_coincidence);
+        // let city_points_absent = delta_one(false, city_coincidence, total_right);
+        // let name_points_absent = delta_one_name(false, token, total_right, &name_to_coincidence);
         // println!("{token}\t{count}\t{city_points_contains:.2}\t{city_points_absent:.2}\t{name_points_contains:.2}\t{name_points_absent:.2}");
         if city_points_contains < stop_words_points {
             city_stop_words.insert(token.to_string());
@@ -247,43 +283,12 @@ fn main() -> io::Result<()> {
             .flatten()
             .collect::<HashSet<_>>();
 
-        // if !person_set.is_empty() {
-        //     println!("result_line={}", result_line);
-        //     println!("{:?}", result_tokens);
-        //     for person in person_set.iter() {
-        //         println!("person={:?}", person);
-        //     }
-        // }
-        // optional LinePeople
         let mut line_people: Option<LinePeople> = None;
         for person in person_set.iter() {
             let person = *person;
 
-            fn calculate_points(
-                dist_list: &[Dist],
-                result_tokens: &HashSet<String>,
-                to_coincidence: &TokenToCoincidence,
-            ) -> f32 {
-                dist_list
-                    .iter()
-                    .map(|dist| {
-                        let contains_list: Vec<_> = dist
-                            .tokens()
-                            .iter()
-                            .map(|token| result_tokens.contains(token))
-                            .collect();
-                        dist.delta_tokens(&contains_list, to_coincidence)
-                    })
-                    .sum()
-            }
-
-            let name_points_sum = calculate_points(
-                &person.name_dist_list,
-                &result_tokens,
-                &name_to_conincidence,
-            );
-            let city_points_sum =
-                calculate_points(&person.city_dist_list, &result_tokens, &city_to_coincidence);
+            let name_points_sum = person.name_points(&result_tokens, &name_to_coincidence);
+            let city_points_sum = person.city_points(&result_tokens, &city_to_coincidence);
 
             let post_points = prior_points + name_points_sum + city_points_sum;
 
