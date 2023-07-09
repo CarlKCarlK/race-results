@@ -1,9 +1,9 @@
 #![allow(clippy::print_literal)]
 
+use anyinput::anyinput;
+use include_flate::flate;
 use std::collections::HashMap;
 use std::f32::consts::E;
-
-use anyinput::anyinput;
 
 pub fn delta_one_name(
     contains: bool,
@@ -82,8 +82,8 @@ pub struct TokenToCoincidence {
     pub default: f32,
 }
 
-const NAME_TO_PROB_STR: &str =
-    include_str!(r"C:\Users\carlk\OneDrive\Shares\RaceResults\name_probability.tsv");
+// cmk file is not local
+flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/name_probability.tsv");
 
 impl TokenToCoincidence {
     pub fn default_names() -> Self {
