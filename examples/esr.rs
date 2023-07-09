@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use race_results::{delta_many, delta_one, delta_one_name, log_odds, prob, NameToProb};
+use race_results::{delta_many, delta_one, delta_one_name, log_odds, prob, TokenToCoincidence};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -49,7 +49,7 @@ impl Dist {
             .collect_vec()
     }
 
-    fn delta_names(&self, contains_list: &[bool], name_to_prob: &NameToProb) -> f32 {
+    fn delta_names(&self, contains_list: &[bool], name_to_prob: &TokenToCoincidence) -> f32 {
         // cmk what if not found?
         // cmk why bother with collect?
         let prob_coincidence_list: Vec<_> = self
@@ -65,20 +65,14 @@ impl Dist {
     fn delta_cities(
         &self,
         contains_list: &[bool],
-        city_to_coincidence: &HashMap<String, f32>,
-        city_conincidence_default: f32,
+        city_to_coincidence: &TokenToCoincidence,
     ) -> f32 {
         // cmk what if not found?
         // cmk why bother with collect?
         let prob_coincidence_list: Vec<_> = self
             .tokens()
             .iter()
-            .map(|city| {
-                city_to_coincidence
-                    .get(city)
-                    .unwrap_or(&city_conincidence_default)
-            })
-            .cloned()
+            .map(|city| city_to_coincidence.prob(city.as_ref()))
             .collect();
         // cmk merge delta_many code to here
         delta_many(contains_list, &prob_coincidence_list, &self.probs())
@@ -122,7 +116,7 @@ fn main() -> io::Result<()> {
     let results_file_name = r"M:\projects\member_match\carnation2023results.txt";
     let re = Regex::new(r"[\-/ &\t]+").unwrap();
     let total_right = 0.6f32;
-    let name_to_prob = NameToProb::default();
+    let name_to_conincidence = TokenToCoincidence::default_names();
     let stop_words_points = 3.0f32;
     let threshold_probability = 0.01f32;
 
@@ -161,13 +155,18 @@ fn main() -> io::Result<()> {
     result_token_to_line_count_vec.sort_by_key(|(_token, count)| -**count);
     let mut city_stop_words = HashSet::<String>::new();
     let mut name_stop_words = HashSet::<String>::new();
-    let mut city_to_coincidence = HashMap::<String, f32>::new();
+    let mut city_to_coincidence = TokenToCoincidence {
+        token_to_prob: HashMap::new(),
+        default: city_conincidence_default,
+    };
     for (token, count) in result_token_to_line_count_vec.iter() {
         // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
         let city_conincidence = (*count + 1) as f32 / (result_count + 2) as f32;
-        city_to_coincidence.insert(token.to_string(), city_conincidence);
+        city_to_coincidence
+            .token_to_prob
+            .insert(token.to_string(), city_conincidence);
         let city_points_contains = delta_one(true, city_conincidence, total_right);
-        let name_points_contains = delta_one_name(true, token, total_right, &name_to_prob);
+        let name_points_contains = delta_one_name(true, token, total_right, &name_to_conincidence);
         // let city_points_absent = delta_one(false, city_conincidence, total_right);
         // let name_points_absent = delta_one_name(false, token, total_right, &name_to_prob);
         // println!("{token}\t{count}\t{city_points_contains:.2}\t{city_points_absent:.2}\t{name_points_contains:.2}\t{name_points_absent:.2}");
@@ -283,7 +282,7 @@ fn main() -> io::Result<()> {
                         .iter()
                         .map(|name| result_tokens.contains(name))
                         .collect();
-                    name_dist.delta_names(&contains_list, &name_to_prob)
+                    name_dist.delta_names(&contains_list, &name_to_conincidence)
                 })
                 .sum();
 
@@ -298,11 +297,7 @@ fn main() -> io::Result<()> {
                         .iter()
                         .map(|city| result_tokens.contains(city))
                         .collect();
-                    city_dist.delta_cities(
-                        &contains_list,
-                        &city_to_coincidence,
-                        city_conincidence_default,
-                    )
+                    city_dist.delta_cities(&contains_list, &city_to_coincidence)
                 })
                 .sum();
 
