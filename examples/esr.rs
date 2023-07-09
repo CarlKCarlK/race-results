@@ -13,35 +13,6 @@ fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io::Re
     Ok(BufReader::new(File::open(path)?).lines())
 }
 
-// cmk move to Dist
-// cmk shouldn't have to pass in the re
-fn split_name(name: &str, total_right: f32, re: &Regex) -> Dist {
-    let name_list = re.split(name).map(|s| s.to_owned()).collect::<Vec<_>>();
-    // Create a vector called right_list with the same length as name_list and with values = total_right/name_list.len()
-    let right_list = name_list
-        .iter()
-        .map(|_| total_right / name_list.len() as f32)
-        .collect_vec();
-
-    let dist = Dist {
-        token_and_prob: name_list.into_iter().zip(right_list).collect_vec(),
-    };
-
-    // cmk it doesn't make sense to pull out the strings when we had them earlier
-    // cmk should return an error rather than panic
-    // cmk assert that every first_name_list, last_name, city contains only A-Z cmk update
-    for item in dist.tokens().iter() {
-        for c in item.chars() {
-            assert!(
-                c.is_ascii_alphabetic() || c == '.' || c == '\'',
-                "bad char in {:?}",
-                item
-            );
-        }
-    }
-    dist
-}
-
 #[derive(Debug)]
 struct Dist {
     token_and_prob: Vec<(String, f32)>,
@@ -64,13 +35,38 @@ impl Dist {
             .collect_vec()
     }
 
-    fn delta_tokens(
-        &self,
-        contains_list: &[bool],
-        token_to_coincidence: &TokenToCoincidence,
-    ) -> f32 {
+    // cmk shouldn't have to pass in the re
+    fn split_name(name: &str, total_right: f32, re: &Regex) -> Self {
+        let name_list = re.split(name).map(|s| s.to_owned()).collect::<Vec<_>>();
+        // Create a vector called right_list with the same length as name_list and with values = total_right/name_list.len()
+        let right_list = name_list
+            .iter()
+            .map(|_| total_right / name_list.len() as f32)
+            .collect_vec();
+
+        let dist = Dist {
+            token_and_prob: name_list.into_iter().zip(right_list).collect_vec(),
+        };
+
+        // cmk it doesn't make sense to pull out the strings when we had them earlier
+        // cmk should return an error rather than panic
+        // cmk assert that every first_name_list, last_name, city contains only A-Z cmk update
+        for item in dist.tokens().iter() {
+            for c in item.chars() {
+                assert!(
+                    c.is_ascii_alphabetic() || c == '.' || c == '\'',
+                    "bad char in {:?}",
+                    item
+                );
+            }
+        }
+        dist
+    }
+
+    fn delta(&self, contains_list: &[bool], token_to_coincidence: &TokenToCoincidence) -> f32 {
         // cmk what if not found?
         // cmk why bother with collect?
+        // it's weird that we look at tokens and probs separately
         let prob_coincidence_list: Vec<_> = self
             .tokens()
             .iter()
@@ -103,7 +99,7 @@ impl Person {
                     .iter()
                     .map(|token| result_tokens.contains(token))
                     .collect();
-                dist.delta_tokens(&contains_list, to_coincidence)
+                dist.delta(&contains_list, to_coincidence)
             })
             .sum()
     }
@@ -152,14 +148,62 @@ fn main() -> io::Result<()> {
     // let result_no_city = sample_top.join("sample_results_nocity.txt");
     let members_file_name = r"C:\Users\carlk\OneDrive\programs\MemberMatch\ESRMembers2012Dec.txt";
     let results_file_name = r"M:\projects\member_match\carnation2023results.txt";
+    let nicknames_file_name =
+        r"C:\Users\carlk\OneDrive\programs\RaceResults\race-results\examples\nicknames.txt";
     // cmk there should be a tokenize struct, etc.
-    let re = Regex::new(r"[\-/ &\t]+").unwrap();
+    let prob_member_in_race = 0.01;
     let total_right = 0.6f32;
     let name_to_coincidence = TokenToCoincidence::default_names();
     let stop_words_points = 3.0f32;
     let threshold_probability = 0.01f32;
 
-    let prob_member_in_race = 0.01;
+    let re = Regex::new(r"[\-/ &\t]+").unwrap();
+
+    let mut name_to_nickname_set = HashMap::<String, HashSet<String>>::new();
+    for nickname_line in read_lines(nicknames_file_name)? {
+        let nickname_line = nickname_line?;
+        // expect one tab
+        let left;
+        let right;
+        // cmk make this nicers
+        if let Some((leftx, rightx)) = nickname_line.split('\t').collect_tuple() {
+            left = leftx.to_ascii_uppercase();
+            right = rightx.to_ascii_uppercase();
+        } else {
+            panic!("bad nickname line {:?}", nickname_line);
+        }
+
+        let left_and_right = [left.clone(), right.clone()];
+        let left_and_right = left_and_right
+            .iter()
+            .map(|side| {
+                side.split('/')
+                    .map(|name| {
+                        // panic if not [A-Z.]
+                        name.chars().for_each(|c| {
+                            if !c.is_ascii_alphabetic() && c != '.' {
+                                panic!("bad char in {:?}", name);
+                            }
+                        });
+                        name
+                    })
+                    .collect_vec()
+            })
+            .collect_vec();
+        for left in left_and_right[0].iter() {
+            for right in left_and_right[1].iter() {
+                name_to_nickname_set
+                    .entry(left.to_string())
+                    .or_insert_with(HashSet::new)
+                    .insert(right.to_string());
+                name_to_nickname_set
+                    .entry(right.to_string())
+                    .or_insert_with(HashSet::new)
+                    .insert(left.to_string());
+            }
+        }
+    }
+    println!("name_to_nickname_set={:?}", name_to_nickname_set);
 
     // For ever token, in the results, find what fraction of the lines it occurs in (with smoothing).
     // (If a token is too common, we will not use it for initial matching.)
@@ -230,14 +274,14 @@ fn main() -> io::Result<()> {
         let last_name = last_name.to_uppercase();
         let city = city.to_uppercase();
 
-        let first_dist = split_name(&first_name, total_right, &re);
-        let last_dist = split_name(&last_name, total_right, &re);
+        let first_dist = Dist::split_name(&first_name, total_right, &re);
+        let last_dist = Dist::split_name(&last_name, total_right, &re);
         let name_dist_list = vec![first_dist, last_dist];
 
         // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
         let city_dist_list = city
             .split_ascii_whitespace()
-            .map(|city| split_name(city, total_right, &re))
+            .map(|city| Dist::split_name(city, total_right, &re))
             .collect();
 
         let person = Rc::new(Person {
@@ -349,4 +393,6 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-// cmk0 city: MILL CREEK should be treated like 1st name and last name but the number of names varies and the concidence is different.
+// cmk should O'Neil tokenize to ONEIL?
+// cmk be sure there is a way to run without matching on city
+// cmk what about people with two-part first names?
