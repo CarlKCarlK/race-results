@@ -60,13 +60,36 @@ impl Dist {
         // cmk merge delta_many code to here
         delta_many(contains_list, &prob_coincidence_list, &self.probs())
     }
+
+    // cmk0 make city_to_coincidence a struct
+    fn delta_cities(
+        &self,
+        contains_list: &[bool],
+        city_to_coincidence: &HashMap<String, f32>,
+        city_conincidence_default: f32,
+    ) -> f32 {
+        // cmk what if not found?
+        // cmk why bother with collect?
+        let prob_coincidence_list: Vec<_> = self
+            .tokens()
+            .iter()
+            .map(|city| {
+                city_to_coincidence
+                    .get(city)
+                    .unwrap_or(&city_conincidence_default)
+            })
+            .cloned()
+            .collect();
+        // cmk merge delta_many code to here
+        delta_many(contains_list, &prob_coincidence_list, &self.probs())
+    }
 }
 
 // cmk which is it a Person and a Member?
 #[derive(Debug)]
 struct Person {
     name_dist_list: Vec<Dist>,
-    city: String,
+    city_dist_list: Vec<Dist>,
     id: usize,
 }
 
@@ -189,9 +212,13 @@ fn main() -> io::Result<()> {
         }
 
         let name_dist_list = vec![first_dist, last_dist];
+        let city_dist = Dist {
+            token_and_prob: vec![(city.clone(), total_right)],
+        };
+        let city_dist_list: Vec<Dist> = vec![city_dist];
         let person = Rc::new(Person {
             name_dist_list,
-            city,
+            city_dist_list,
             id,
         });
         // cmk is there a way to avoid cloning keys?
@@ -208,11 +235,15 @@ fn main() -> io::Result<()> {
             }
         }
 
-        if !city_stop_words.contains(&person.city) {
-            token_to_person_list
-                .entry(person.city.clone())
-                .or_insert(Vec::new())
-                .push(person.clone());
+        for city_dist in person.city_dist_list.iter() {
+            for city in city_dist.tokens().iter() {
+                if !city_stop_words.contains(city) {
+                    token_to_person_list
+                        .entry(city.clone())
+                        .or_insert(Vec::new())
+                        .push(person.clone());
+                }
+            }
         }
     }
 
@@ -237,7 +268,6 @@ fn main() -> io::Result<()> {
         //         println!("person={:?}", person);
         //     }
         // }
-
         // optional LinePeople
         let mut line_people: Option<LinePeople> = None;
         for person in person_set.iter() {
@@ -251,20 +281,32 @@ fn main() -> io::Result<()> {
                     let contains_list: Vec<_> = name_dist
                         .tokens()
                         .iter()
-                        .map(|first_name| result_tokens.contains(first_name))
+                        .map(|name| result_tokens.contains(name))
                         .collect();
                     name_dist.delta_names(&contains_list, &name_to_prob)
                 })
                 .sum();
 
-            let contains_city = result_tokens.contains(&person.city);
-            let city_conincidence = city_to_coincidence
-                .get(&person.city)
-                .unwrap_or(&city_conincidence_default);
+            // cmk should name_to_prob and city_to_coincidence both be _prob or _coincidence?
+            let city_points_sum: f32 = person
+                .city_dist_list
+                .iter()
+                .map(|city_dist| {
+                    // cmk combine these lines
+                    let contains_list: Vec<_> = city_dist
+                        .tokens()
+                        .iter()
+                        .map(|city| result_tokens.contains(city))
+                        .collect();
+                    city_dist.delta_cities(
+                        &contains_list,
+                        &city_to_coincidence,
+                        city_conincidence_default,
+                    )
+                })
+                .sum();
 
-            let city_name_points = delta_one(contains_city, *city_conincidence, total_right);
-
-            let post_points = prior_points + name_points_sum + city_name_points;
+            let post_points = prior_points + name_points_sum + city_points_sum;
 
             let post_prob = prob(post_points);
 
@@ -301,14 +343,19 @@ fn main() -> io::Result<()> {
         person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         for (person, prob) in person_prob_list.iter() {
             println!(
-                "  {:?} {} {:.2}",
+                "  {:?} {:?} {:.2}",
                 // cmk if this is useful, make it a method
                 person
                     .name_dist_list
                     .iter()
                     .map(|name_dist| name_dist.tokens())
                     .collect_vec(),
-                person.city,
+                // cmk if this is useful, make it a method
+                person
+                    .city_dist_list
+                    .iter()
+                    .map(|city_dist| city_dist.tokens())
+                    .collect_vec(),
                 prob
             );
         }
