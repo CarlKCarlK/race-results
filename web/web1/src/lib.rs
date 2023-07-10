@@ -1,5 +1,5 @@
 extern crate alloc;
-use race_results::find_matches;
+use race_results::{find_matches, SAMPLE_MEMBERS_STR, SAMPLE_RESULTS_STR};
 use std::panic;
 use wasm_bindgen::prelude::*;
 
@@ -15,6 +15,16 @@ pub fn member_match(members: &str, race_results: &str, _with_city: bool) -> JsVa
         Err(panic) => format!("Error: {:?}", panic),
     };
     JsValue::from_str(&s)
+}
+
+#[wasm_bindgen]
+pub fn sample_members() -> JsValue {
+    JsValue::from_str(&SAMPLE_MEMBERS_STR)
+}
+
+#[wasm_bindgen]
+pub fn sample_results() -> JsValue {
+    JsValue::from_str(&SAMPLE_RESULTS_STR)
 }
 
 // cmk what if say "match with city" before uploading a file

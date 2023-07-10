@@ -1,14 +1,6 @@
-use std::{
-    fs::File,
-    io::{self, BufRead, BufReader},
-    path::Path,
-};
+use std::io;
 
-use race_results::find_matches;
-
-fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io::Result<String>>> {
-    Ok(BufReader::new(File::open(path)?).lines())
-}
+use race_results::{find_matches, read_lines};
 
 fn main() -> io::Result<()> {
     // let sample_top = Path::new(r"C:\Users\carlk\OneDrive\Shares\RaceResults");

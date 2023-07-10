@@ -6,6 +6,11 @@ extern crate alloc;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::{
+    fs::File,
+    io::{self, BufRead, BufReader},
+    path::Path,
+};
 
 use alloc::{rc::Rc, string::String, string::ToString, vec::Vec};
 use anyinput::anyinput;
@@ -101,6 +106,9 @@ pub struct TokenToCoincidence {
 //     include_str!(r"O:\programs\RaceResults\race-results\examples\nicknames.txt");
 flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/name_probability.tsv");
 flate!(static NICKNAMES_STR: str from "examples/nicknames.txt");
+flate!(pub static SAMPLE_MEMBERS_STR: str from "../../../Shares/RaceResults/sample_members.no_nicknames.tsv");
+flate!(pub static SAMPLE_RESULTS_STR: str from "../../../Shares/RaceResults/sample_results_withcity.txt");
+
 // const _: &'static str = "name\tprobability\r\nAAB\t5.00E-07\r\n";
 // #[allow(missing_copy_implementations)]
 // #[allow(non_camel_case_types)]
@@ -537,7 +545,7 @@ pub fn find_matches(
         }
     }
     let mut token_to_person_list: HashMap<String, Vec<Rc<Person>>> = HashMap::new();
-    for (id, line) in member_lines.enumerate() {
+    for (id, line) in member_lines.skip(1).enumerate() {
         // cmk treat first and last more uniformly
         // cmk show a nice error if the line is not tab-separated, three columns
         // cmk println!("line={:?}", line);
@@ -870,6 +878,19 @@ struct LinePeople {
     person_prob_list: Vec<(Rc<Person>, f32)>,
 }
 
+pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io::Result<String>>> {
+    Ok(BufReader::new(File::open(path)?).lines())
+}
+
+// #[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn sample_data() {
+    let member_lines = SAMPLE_MEMBERS_STR.lines();
+    let result_lines = SAMPLE_RESULTS_STR.lines();
+    let matches = find_matches(member_lines, result_lines.clone(), result_lines);
+    println!("matches: {:?}", matches);
+}
+
 // cmk make the results paste in window small
 // cmk make the output window as large as needed.
 // cmk have a page that shows for format of the members file.
@@ -877,3 +898,5 @@ struct LinePeople {
 // cmk should the members file have a header?
 // cmk use HTML to show the output nicer
 // cmk display every error possible in the input data.
+// cmk0 need to do multi-part last names and first names (space and -)
+// cmk0 need to remove ' from names (maybe ".")
