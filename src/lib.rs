@@ -1,9 +1,12 @@
+#![cfg_attr(not(test), no_std)]
 #![allow(clippy::print_literal)]
 
+extern crate alloc;
+
+use alloc::{collections::BTreeMap, string::String, string::ToString, vec::Vec};
 use anyinput::anyinput;
-use include_flate::flate;
-use std::collections::HashMap;
-use std::f32::consts::E;
+use core::f32::consts::E;
+// use include_flate::flate;
 
 pub fn delta_one_name(
     contains: bool,
@@ -77,22 +80,58 @@ pub fn prob(logodds: f32) -> f32 {
 }
 
 // cmk the fields should be private
+// cmk should we use 3rd party HashMap?
 pub struct TokenToCoincidence {
-    pub token_to_prob: HashMap<String, f32>,
+    pub token_to_prob: BTreeMap<String, f32>,
     pub default: f32,
 }
 
-// cmk file is not local
-flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/name_probability.tsv");
+// // cmk file is not local
+pub static NAME_TO_PROB_STR: &str = include_str!(r"O:\Shares\RaceResults\name_probability.tsv");
+// flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/tiny_name_probability.txt");
+// const _: &'static str = "name\tprobability\r\nAAB\t5.00E-07\r\n";
+// #[allow(missing_copy_implementations)]
+// #[allow(non_camel_case_types)]
+// #[allow(dead_code)]
+// struct NAME_TO_PROB_STR {
+//     __private_field: (),
+// }
+// #[doc(hidden)]
+// static NAME_TO_PROB_STR: NAME_TO_PROB_STR = NAME_TO_PROB_STR {
+//     __private_field: (),
+// };
+// impl ::lazy_static::__Deref for NAME_TO_PROB_STR {
+//     type Target = ::alloc::string::String;
+//     fn deref(&self) -> &::alloc::string::String {
+//         #[inline(always)]
+//         fn __static_ref_initialize() -> ::alloc::string::String {
+//             ::include_flate::decode_string(
+//                 b"\x05\xc0;\n\x00 \x08\x00\xd0Y\xc1\xa3\x14.\xd1l\xd0A\x14\x1a\x84~DK\xb7\xefM\x1d\r\xf6Y\xa6\xe6\xdd\xef#\x14)\x90\"s\r\x9c\t?",
+//             )
+//         }
+//         #[inline(always)]
+//         fn __stability() -> &'static ::alloc::string::String {
+//             static LAZY: ::lazy_static::lazy::Lazy<::alloc::string::String> =
+//                 ::lazy_static::lazy::Lazy::INIT;
+//             LAZY.get(__static_ref_initialize)
+//         }
+//         __stability()
+//     }
+// }
+// impl ::lazy_static::LazyStatic for NAME_TO_PROB_STR {
+//     fn initialize(lazy: &Self) {
+//         let _ = &**lazy;
+//     }
+// }
 
 impl TokenToCoincidence {
     pub fn default_names() -> Self {
-        let mut name_to_conincidence = HashMap::new();
+        let mut name_to_conincidence = BTreeMap::new();
         for line in NAME_TO_PROB_STR.lines().skip(1) {
             let parts: Vec<&str> = line.split('\t').collect();
-            let name = parts[0].to_string();
+            let name = parts[0];
             let prob = parts[1].parse::<f32>().unwrap();
-            name_to_conincidence.insert(name, prob);
+            name_to_conincidence.insert(name.to_string(), prob);
         }
         let min_prob = *name_to_conincidence
             .values()

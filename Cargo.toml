@@ -8,7 +8,8 @@ name = "race_results"
 
 [dependencies]
 anyinput = "0.1.6"
-include-flate = "0.2.0"
+# include-flate = { path = "../../include-flate" }
+# lazy_static = "1.4.0"
 
 [dev-dependencies]
 itertools = "0.10.5"

@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use race_results::{delta_many, delta_one, delta_one_name, log_odds, prob, TokenToCoincidence};
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{self, BufRead, BufReader};
@@ -287,7 +287,7 @@ fn main() -> io::Result<()> {
     let mut city_stop_words = HashSet::<String>::new();
     let mut name_stop_words = HashSet::<String>::new();
     let mut city_to_coincidence = TokenToCoincidence {
-        token_to_prob: HashMap::new(),
+        token_to_prob: BTreeMap::new(),
         default: city_coincidence_default,
     };
     for (token, count) in result_token_to_line_count_vec.iter() {
@@ -317,6 +317,8 @@ fn main() -> io::Result<()> {
         let line = member_list?;
 
         // cmk treat first and last more uniformly
+        // cmk show a nice error if the line is not tab-separated, three columns
+        // cmk println!("line={:?}", line);
         let (first_name, last_name, city) = line.split('\t').collect_tuple().unwrap();
         let first_name = first_name.to_uppercase();
         let last_name = last_name.to_uppercase();
