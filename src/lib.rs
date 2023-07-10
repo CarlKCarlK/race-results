@@ -1,4 +1,4 @@
-#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![allow(clippy::print_literal)]
 
 extern crate alloc;
@@ -149,6 +149,7 @@ impl TokenToCoincidence {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn notebook() {
     // Random line is about Robert
@@ -347,6 +348,7 @@ fn notebook() {
     assert_eq!(post_points, -3.1063852);
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn test2() {
     struct Person {
@@ -390,7 +392,8 @@ fn test2() {
         &name_to_conincidence,
     );
 
-    println!("first_name: {:.2} points", first_name_points);
+    // println!("first_name: {:.2} points", first_name_points);
+    assert_eq!(first_name_points, 2.9491668);
 
     let last_name_points = delta_one_name(
         contains_last,
@@ -399,15 +402,17 @@ fn test2() {
         &name_to_conincidence,
     );
 
-    println!("last_name: {:.2} points", last_name_points);
+    // println!("last_name: {:.2} points", last_name_points);
+    assert_eq!(last_name_points, 4.699481);
 
     let city_by_coincidence = (170 + 1) as f32 / (result_count + 2) as f32;
     let city_name_points = delta_one(contains_city, city_by_coincidence, prob_right);
 
     let post_points = prior_points + first_name_points + last_name_points + city_name_points;
-    println!(
-        "post: {:.2} points, {:.5} probability",
-        post_points,
-        prob(post_points)
-    );
+    assert_eq!(post_points, -2.60775);
+    // println!(
+    //     "post: {:.2} points, {:.5} probability",
+    //     post_points,
+    //     prob(post_points)
+    // );
 }
