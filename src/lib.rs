@@ -869,3 +869,11 @@ struct LinePeople {
     max_prob: f32,
     person_prob_list: Vec<(Rc<Person>, f32)>,
 }
+
+// cmk make the results paste in window small
+// cmk make the output window as large as needed.
+// cmk have a page that shows for format of the members file.
+// cmk load the page with samples (which means having a small member's input)
+// cmk should the members file have a header?
+// cmk use HTML to show the output nicer
+// cmk display every error possible in the input data.
