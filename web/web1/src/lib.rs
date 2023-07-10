@@ -4,11 +4,16 @@ use std::panic;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn member_match(members: &str, race_results: &str, _with_city: bool) -> JsValue {
+pub fn member_match(members: &str, race_results: &str, include_city: bool) -> JsValue {
     // cmk using catch_unwind isn't nice
     // cmk the work 'result' is used in two different ways here
     let function_result = panic::catch_unwind(|| {
-        find_matches(members.lines(), race_results.lines(), race_results.lines())
+        find_matches(
+            members.lines(),
+            race_results.lines(),
+            race_results.lines(),
+            include_city,
+        )
     });
     let s = match function_result {
         Ok(match_list) => match_list.join("\n"),

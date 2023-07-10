@@ -22,8 +22,8 @@
   <p></p>
   <label for="results">Results</label>
   <textarea id="results" rows="8"></textarea>
-  <button onclick="callWasmFunction()">Match with City</button>
-  <button onclick="callWasmFunction()">Match w/o City</button>
+  <button onclick="callWasmFunction(true)">Match with City</button>
+  <button onclick="callWasmFunction(false)">Match w/o City</button>
   <p></p>
   <label for="matches">Matches</label>
   <textarea id="matches" readonly rows="10"></textarea>
@@ -42,11 +42,11 @@
       }
     }
 
-    function callWasmFunction() {
+    function callWasmFunction(includeCity) {
       var members = document.getElementById('members').value;
       var results = document.getElementById('results').value;
       // cmk add logic for the two buttons
-      var wasmOutput = member_match(members, results, false);
+      var wasmOutput = member_match(members, results, includeCity);
       document.getElementById('matches').value = wasmOutput;
     };
     window.callWasmFunction = callWasmFunction;

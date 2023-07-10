@@ -3,6 +3,9 @@ cargo run --example esr
 
 cargo check --target wasm32-unknown-unknown --features alloc --no-default-features
 
+# from tests/wasm-demo
+wasm-pack build --target web
+
 # test native
 cargo test
 # cmk how come this doesn't work? (update article?)

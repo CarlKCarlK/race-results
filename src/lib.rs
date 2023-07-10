@@ -101,48 +101,10 @@ pub struct TokenToCoincidence {
 }
 
 // // cmk file is not local
-// pub static NAME_TO_PROB_STR: &str = include_str!(r"O:\Shares\RaceResults\name_probability.tsv");
-// pub static NICKNAMES_STR: &str =
-//     include_str!(r"O:\programs\RaceResults\race-results\examples\nicknames.txt");
 flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/name_probability.tsv");
 flate!(static NICKNAMES_STR: str from "examples/nicknames.txt");
 flate!(pub static SAMPLE_MEMBERS_STR: str from "../../../Shares/RaceResults/sample_members.no_nicknames.tsv");
 flate!(pub static SAMPLE_RESULTS_STR: str from "../../../Shares/RaceResults/sample_results_withcity.txt");
-
-// const _: &'static str = "name\tprobability\r\nAAB\t5.00E-07\r\n";
-// #[allow(missing_copy_implementations)]
-// #[allow(non_camel_case_types)]
-// #[allow(dead_code)]
-// struct NAME_TO_PROB_STR {
-//     __private_field: (),
-// }
-// #[doc(hidden)]
-// static NAME_TO_PROB_STR: NAME_TO_PROB_STR = NAME_TO_PROB_STR {
-//     __private_field: (),
-// };
-// impl ::lazy_static::__Deref for NAME_TO_PROB_STR {
-//     type Target = ::alloc::string::String;
-//     fn deref(&self) -> &::alloc::string::String {
-//         #[inline(always)]
-//         fn __static_ref_initialize() -> ::alloc::string::String {
-//             ::include_flate::decode_string(
-//                 b"\x05\xc0;\n\x00 \x08\x00\xd0Y\xc1\xa3\x14.\xd1l\xd0A\x14\x1a\x84~DK\xb7\xefM\x1d\r\xf6Y\xa6\xe6\xdd\xef#\x14)\x90\"s\r\x9c\t?",
-//             )
-//         }
-//         #[inline(always)]
-//         fn __stability() -> &'static ::alloc::string::String {
-//             static LAZY: ::lazy_static::lazy::Lazy<::alloc::string::String> =
-//                 ::lazy_static::lazy::Lazy::INIT;
-//             LAZY.get(__static_ref_initialize)
-//         }
-//         __stability()
-//     }
-// }
-// impl ::lazy_static::LazyStatic for NAME_TO_PROB_STR {
-//     fn initialize(lazy: &Self) {
-//         let _ = &**lazy;
-//     }
-// }
 
 impl TokenToCoincidence {
     pub fn default_names() -> Self {
@@ -442,6 +404,7 @@ pub fn find_matches(
     member_lines: AnyIter<AnyString>,
     result_lines: AnyIter<AnyString>,
     result_lines2: AnyIter<AnyString>,
+    include_city: bool,
 ) -> Vec<String> {
     let prob_member_in_race = 0.01;
     let total_right = 0.6f32;
@@ -528,24 +491,26 @@ pub fn find_matches(
     };
     for (token, count) in result_token_to_line_count_vec.iter() {
         // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
-        let city_coincidence = (*count + 1) as f32 / (result_count + 2) as f32;
-        city_to_coincidence
-            .token_to_prob
-            .insert(token.to_string(), city_coincidence);
-        let city_points_contains = delta_one(true, city_coincidence, total_right);
+        if include_city {
+            let city_coincidence = (*count + 1) as f32 / (result_count + 2) as f32;
+            city_to_coincidence
+                .token_to_prob
+                .insert(token.to_string(), city_coincidence);
+            let city_points_contains = delta_one(true, city_coincidence, total_right);
+            if city_points_contains < stop_words_points {
+                city_stop_words.insert(token.to_string());
+            }
+        }
         let name_points_contains = delta_one_name(true, token, total_right, &name_to_coincidence);
         // let city_points_absent = delta_one(false, city_coincidence, total_right);
         // let name_points_absent = delta_one_name(false, token, total_right, &name_to_coincidence);
         // println!("{token}\t{count}\t{city_points_contains:.2}\t{city_points_absent:.2}\t{name_points_contains:.2}\t{name_points_absent:.2}");
-        if city_points_contains < stop_words_points {
-            city_stop_words.insert(token.to_string());
-        }
         if name_points_contains < stop_words_points {
             name_stop_words.insert(token.to_string());
         }
     }
     let mut token_to_person_list: HashMap<String, Vec<Rc<Person>>> = HashMap::new();
-    for (id, line) in member_lines.skip(1).enumerate() {
+    for (id, line) in member_lines.enumerate() {
         // cmk treat first and last more uniformly
         // cmk show a nice error if the line is not tab-separated, three columns
         // cmk println!("line={:?}", line);
@@ -603,13 +568,15 @@ pub fn find_matches(
             }
         }
 
-        for city_dist in person.city_dist_list.iter() {
-            for city in city_dist.tokens().iter() {
-                if !city_stop_words.contains(city) {
-                    token_to_person_list
-                        .entry(city.clone())
-                        .or_insert(Vec::new())
-                        .push(person.clone());
+        if include_city {
+            for city_dist in person.city_dist_list.iter() {
+                for city in city_dist.tokens().iter() {
+                    if !city_stop_words.contains(city) {
+                        token_to_person_list
+                            .entry(city.clone())
+                            .or_insert(Vec::new())
+                            .push(person.clone());
+                    }
                 }
             }
         }
@@ -618,6 +585,10 @@ pub fn find_matches(
     for (result_line, result_tokens) in result_lines2.zip(results_as_tokens)
     // .take(100)
     {
+        // let cmk = result_line.as_ref().clone();
+        // if cmk.contains("test") {
+        //     println!("result_line");
+        // }
         let person_set = result_tokens
             .iter()
             .filter_map(|token| token_to_person_list.get(token))
@@ -629,7 +600,11 @@ pub fn find_matches(
             let person = *person;
 
             let name_points_sum = person.name_points(&result_tokens, &name_to_coincidence);
-            let city_points_sum = person.city_points(&result_tokens, &city_to_coincidence);
+            let city_points_sum = if include_city {
+                person.city_points(&result_tokens, &city_to_coincidence)
+            } else {
+                0.0
+            };
 
             let post_points = prior_points + name_points_sum + city_points_sum;
 
@@ -637,8 +612,8 @@ pub fn find_matches(
 
             if post_prob > threshold_probability {
                 // println!(
-                //     "{:?} {:?} {} {:.2} {post_prob:.2} {result_line}",
-                //     person.first_name_list, person.last_name_list, person.city, post_points
+                //     "cmk {person:?} {post_points:.2} {post_prob:.2} {}",
+                //     result_line.as_ref()
                 // );
                 if let Some(line_people) = &mut line_people {
                     line_people.max_prob = line_people.max_prob.max(post_prob);
@@ -788,6 +763,7 @@ impl Dist {
         dist
     }
 
+    #[allow(clippy::let_and_return)]
     fn delta(&self, contains_list: &[bool], token_to_coincidence: &TokenToCoincidence) -> f32 {
         // cmk what if not found?
         // cmk why bother with collect?
@@ -798,7 +774,9 @@ impl Dist {
             .map(|token| token_to_coincidence.prob(token.as_ref()))
             .collect();
         // cmk merge delta_many code to here
-        delta_many(contains_list, &prob_coincidence_list, &self.probs())
+        let delta = delta_many(contains_list, &prob_coincidence_list, &self.probs());
+        // println!("cmk {self:?} {delta:?}");
+        delta
     }
 }
 
@@ -887,8 +865,36 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 fn sample_data() {
     let member_lines = SAMPLE_MEMBERS_STR.lines();
     let result_lines = SAMPLE_RESULTS_STR.lines();
-    let matches = find_matches(member_lines, result_lines.clone(), result_lines);
-    println!("matches: {:?}", matches);
+    let include_city = true;
+    let matches = find_matches(
+        member_lines,
+        result_lines.clone(),
+        result_lines,
+        include_city,
+    );
+    for line in matches.iter() {
+        println!("{}", line);
+    }
+}
+
+// cmk000
+#[test]
+fn spot_check() {
+    let include_city = false;
+    let member_lines =
+        read_lines(r"C:\Users\carlk\OneDrive\programs\MemberMatch\ESRMembers2012Dec.txt")
+            .unwrap()
+            .map(|line| line.unwrap());
+    let result_lines = read_lines(r"C:\Users\carlk\Downloads\G_reformatted.txt")
+        .unwrap()
+        .map(|line| line.unwrap());
+    let result_lines2 = read_lines(r"C:\Users\carlk\Downloads\G_reformatted.txt")
+        .unwrap()
+        .map(|line| line.unwrap());
+    let matches = find_matches(member_lines, result_lines, result_lines2, include_city);
+    for line in matches.iter() {
+        println!("{}", line);
+    }
 }
 
 // cmk make the results paste in window small
@@ -900,3 +906,7 @@ fn sample_data() {
 // cmk display every error possible in the input data.
 // cmk0 need to do multi-part last names and first names (space and -)
 // cmk0 need to remove ' from names (maybe ".")
+// cmk put sample data in project
+// cmk create good sample data
+// cmk0 the score for Pat B in the Sammamish Half 2023 seems too low 2%, even with the city setting not right.
+// cmk give users sliders for prob threshold? and priors? etc.
