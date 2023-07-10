@@ -37,4 +37,4 @@ pub fn sample_results() -> JsValue {
 // cmk should we support both *.txt and *.tsv (and *.csv?)
 // cmk0 catching panics isn't working
 // cmk move the match buttons to be close to Results
-// cmk0 remove the alerts
+// cmk why aren't names with spaces and hyphens causing errors?

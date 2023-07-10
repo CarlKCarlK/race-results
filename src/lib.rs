@@ -877,7 +877,7 @@ fn sample_data() {
     }
 }
 
-// cmk000
+// cmk remove
 #[test]
 fn spot_check() {
     let include_city = false;
@@ -908,5 +908,5 @@ fn spot_check() {
 // cmk0 need to remove ' from names (maybe ".")
 // cmk put sample data in project
 // cmk create good sample data
-// cmk0 the score for Pat B in the Sammamish Half 2023 seems too low 2%, even with the city setting not right.
 // cmk give users sliders for prob threshold? and priors? etc.
+// cmk see the work doc for a mock up of the output
