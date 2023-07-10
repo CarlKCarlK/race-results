@@ -6,6 +6,9 @@ edition = "2021"
 [lib]
 name = "race_results"
 
+[workspace]
+members = [".", "web/web1"]
+
 [features]
 default = ["std"]
 std = []

@@ -362,3 +362,11 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "web1"
+version = "0.1.0"
+dependencies = [
+ "race-results",
+ "wasm-bindgen",
+]
