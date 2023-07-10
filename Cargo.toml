@@ -18,6 +18,7 @@ alloc = []
 anyinput = "0.1.6"
 regex = "1.8.4"
 itertools = "0.10.5"
+include-flate = "0.2.0"
 
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

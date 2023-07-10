@@ -1,11 +1,10 @@
-#![no_std]
 extern crate alloc;
-use alloc::string::ToString;
+use race_results::find_matches;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn member_match(members: &str, results: &str, with_city: bool) -> JsValue {
-    let set = "hello";
-    let s = set.to_string();
+pub fn member_match(members: &str, results: &str, _with_city: bool) -> JsValue {
+    let s = find_matches(members.lines(), results.lines(), results.lines());
+    let s = s.join("\n");
     JsValue::from_str(&s)
 }

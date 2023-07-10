@@ -1,15 +1,13 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+// #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(clippy::print_literal)]
+use include_flate::flate;
 
 extern crate alloc;
 
-use alloc::{
-    collections::{BTreeMap, BTreeSet},
-    rc::Rc,
-    string::String,
-    string::ToString,
-    vec::Vec,
-};
+use std::collections::HashMap;
+use std::collections::HashSet;
+
+use alloc::{rc::Rc, string::String, string::ToString, vec::Vec};
 use anyinput::anyinput;
 use core::{
     cmp::Ordering,
@@ -18,7 +16,6 @@ use core::{
 use core::{f32::consts::E, iter::repeat};
 use itertools::Itertools;
 use regex::Regex;
-// use include_flate::flate;
 
 pub fn delta_one_name(
     contains: bool,
@@ -92,17 +89,18 @@ pub fn prob(logodds: f32) -> f32 {
 }
 
 // cmk the fields should be private
-// cmk should we use 3rd party BTreeMap?
+// cmk should we use 3rd party HashMap?
 pub struct TokenToCoincidence {
-    pub token_to_prob: BTreeMap<String, f32>,
+    pub token_to_prob: HashMap<String, f32>,
     pub default: f32,
 }
 
 // // cmk file is not local
-pub static NAME_TO_PROB_STR: &str = include_str!(r"O:\Shares\RaceResults\name_probability.tsv");
-pub static NICKNAMES_STR: &str =
-    include_str!(r"O:\programs\RaceResults\race-results\examples\nicknames.txt");
-// flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/tiny_name_probability.txt");
+// pub static NAME_TO_PROB_STR: &str = include_str!(r"O:\Shares\RaceResults\name_probability.tsv");
+// pub static NICKNAMES_STR: &str =
+//     include_str!(r"O:\programs\RaceResults\race-results\examples\nicknames.txt");
+flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/name_probability.tsv");
+flate!(static NICKNAMES_STR: str from "examples/nicknames.txt");
 // const _: &'static str = "name\tprobability\r\nAAB\t5.00E-07\r\n";
 // #[allow(missing_copy_implementations)]
 // #[allow(non_camel_case_types)]
@@ -140,7 +138,7 @@ pub static NICKNAMES_STR: &str =
 
 impl TokenToCoincidence {
     pub fn default_names() -> Self {
-        let mut name_to_conincidence = BTreeMap::new();
+        let mut name_to_conincidence = HashMap::new();
         for line in NAME_TO_PROB_STR.lines().skip(1) {
             let parts: Vec<&str> = line.split('\t').collect();
             let name = parts[0];
@@ -431,10 +429,11 @@ fn test2() {
     // );
 }
 
+#[anyinput]
 pub fn find_matches(
-    member_lines: impl Iterator<Item = String>,
-    result_lines: impl Iterator<Item = String>,
-    result_lines2: impl Iterator<Item = String>,
+    member_lines: AnyIter<AnyString>,
+    result_lines: AnyIter<AnyString>,
+    result_lines2: AnyIter<AnyString>,
 ) -> Vec<String> {
     let prob_member_in_race = 0.01;
     let total_right = 0.6f32;
@@ -443,8 +442,8 @@ pub fn find_matches(
     let stop_words_points = 3.0f32;
     let threshold_probability = 0.01f32;
     let re = Regex::new(r"[\-/ &\t]+").unwrap();
-    let mut name_to_nickname_set = BTreeMap::<String, BTreeSet<String>>::new();
-    let city_to_nickname_set = BTreeMap::<String, BTreeSet<String>>::new();
+    let mut name_to_nickname_set = HashMap::<String, HashSet<String>>::new();
+    let city_to_nickname_set = HashMap::<String, HashSet<String>>::new();
     for nickname_line in NICKNAMES_STR.lines() {
         // expect one tab
         let left;
@@ -478,19 +477,19 @@ pub fn find_matches(
             for right in left_and_right[1].iter() {
                 name_to_nickname_set
                     .entry(left.to_string())
-                    .or_insert_with(BTreeSet::new)
+                    .or_insert_with(HashSet::new)
                     .insert(right.to_string());
                 name_to_nickname_set
                     .entry(right.to_string())
-                    .or_insert_with(BTreeSet::new)
+                    .or_insert_with(HashSet::new)
                     .insert(left.to_string());
             }
         }
     }
-    let results_as_tokens: Vec<BTreeSet<String>> = result_lines
+    let results_as_tokens: Vec<HashSet<String>> = result_lines
         .map(|result_line| {
-            let result_line = result_line.to_ascii_uppercase();
-            let token_set: BTreeSet<String> = re
+            let result_line = result_line.as_ref().to_ascii_uppercase();
+            let token_set: HashSet<String> = re
                 .split(&result_line)
                 .map(|s| s.to_owned())
                 .filter(|token| !token.is_empty() && !token.chars().any(|c| c.is_ascii_digit()))
@@ -507,16 +506,16 @@ pub fn find_matches(
         results_as_tokens
             .iter()
             .flatten()
-            .fold(BTreeMap::new(), |mut acc, token| {
+            .fold(HashMap::new(), |mut acc, token| {
                 *acc.entry(token.clone()).or_insert(0) += 1;
                 acc
             });
     let mut result_token_to_line_count_vec: Vec<_> = result_token_to_line_count.iter().collect();
     result_token_to_line_count_vec.sort_by_key(|(_token, count)| -**count);
-    let mut city_stop_words = BTreeSet::<String>::new();
-    let mut name_stop_words = BTreeSet::<String>::new();
+    let mut city_stop_words = HashSet::<String>::new();
+    let mut name_stop_words = HashSet::<String>::new();
     let mut city_to_coincidence = TokenToCoincidence {
-        token_to_prob: BTreeMap::new(),
+        token_to_prob: HashMap::new(),
         default: city_coincidence_default,
     };
     for (token, count) in result_token_to_line_count_vec.iter() {
@@ -537,12 +536,12 @@ pub fn find_matches(
             name_stop_words.insert(token.to_string());
         }
     }
-    let mut token_to_person_list: BTreeMap<String, Vec<Rc<Person>>> = BTreeMap::new();
+    let mut token_to_person_list: HashMap<String, Vec<Rc<Person>>> = HashMap::new();
     for (id, line) in member_lines.enumerate() {
         // cmk treat first and last more uniformly
         // cmk show a nice error if the line is not tab-separated, three columns
         // cmk println!("line={:?}", line);
-        let (first_name, last_name, city) = line.split('\t').collect_tuple().unwrap();
+        let (first_name, last_name, city) = line.as_ref().split('\t').collect_tuple().unwrap();
         let first_name = first_name.to_uppercase();
         let last_name = last_name.to_uppercase();
         let city = city.to_uppercase();
@@ -615,7 +614,7 @@ pub fn find_matches(
             .iter()
             .filter_map(|token| token_to_person_list.get(token))
             .flatten()
-            .collect::<BTreeSet<_>>();
+            .collect::<HashSet<_>>();
 
         let mut line_people: Option<LinePeople> = None;
         for person in person_set.iter() {
@@ -640,7 +639,7 @@ pub fn find_matches(
                         .push((person.clone(), post_prob));
                 } else {
                     line_people = Some(LinePeople {
-                        line: result_line.clone(),
+                        line: result_line.as_ref().to_string(),
                         max_prob: post_prob,
                         person_prob_list: vec![(person.clone(), post_prob)],
                     });
@@ -713,7 +712,7 @@ impl Dist {
         name: &str,
         total_right: f32,
         re: &Regex,
-        token_to_nickname_set: &BTreeMap<String, BTreeSet<String>>,
+        token_to_nickname_set: &HashMap<String, HashSet<String>>,
         total_nickname: f32,
     ) -> Self {
         assert!(
@@ -728,12 +727,9 @@ impl Dist {
             (0.0..=1.0).contains(&total_nickname),
             "Expect total_nickname to be between 0 and 1"
         );
-        let main_set = re
-            .split(name)
-            .map(|s| s.to_owned())
-            .collect::<BTreeSet<_>>();
+        let main_set = re.split(name).map(|s| s.to_owned()).collect::<HashSet<_>>();
         // cmk test that if a nickname is in the main set, it's not in the nickname set
-        let nickname_set: BTreeSet<_> = main_set
+        let nickname_set: HashSet<_> = main_set
             .iter()
             .filter_map(|token| token_to_nickname_set.get(token))
             .flat_map(|nickname_set| nickname_set.iter().cloned())
@@ -809,7 +805,7 @@ struct Person {
 impl Person {
     fn points(
         dist_list: &[Dist],
-        result_tokens: &BTreeSet<String>,
+        result_tokens: &HashSet<String>,
         to_coincidence: &TokenToCoincidence,
     ) -> f32 {
         dist_list
@@ -827,7 +823,7 @@ impl Person {
 
     pub fn name_points(
         &self,
-        result_tokens: &BTreeSet<String>,
+        result_tokens: &HashSet<String>,
         name_to_coincidence: &TokenToCoincidence,
     ) -> f32 {
         Person::points(&self.name_dist_list, result_tokens, name_to_coincidence)
@@ -835,7 +831,7 @@ impl Person {
 
     pub fn city_points(
         &self,
-        result_tokens: &BTreeSet<String>,
+        result_tokens: &HashSet<String>,
         city_to_coincidence: &TokenToCoincidence,
     ) -> f32 {
         Person::points(&self.city_dist_list, result_tokens, city_to_coincidence)
