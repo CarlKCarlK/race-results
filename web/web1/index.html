@@ -1,23 +1,35 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <title>Race Results</title>
+  <style>
+    textarea {
+      width: 100%;
+      height: 200px;
+    }
+    button {
+      margin-top: 10px;
+    }
+  </style>
+  <script>
+    function callWasmFunction(buttonType) {
+      var members = document.getElementById('members').value;
+      var results = document.getElementById('results').value;
+      // cmk add logic for the two buttons
+      var wasmOutput = member_match(members, results);
+      document.getElementById('matches').value = wasmOutput;
+    }
+  </script>
+</head>
 <body>
-    <h2>Rust WASM RangeSetBlaze Demo</h2>
-    <p>Enter a list of comma-separated integers:</p>
-    <input id="inputData" type="text" value="100,103,101,102,-3,-4" oninput="callWasmFunction()">
-    <br><br>
-    <p id="output"></p>
-    <script type="module">
-        import init, { disjoint_intervals } from './pkg/wasm_demo.js';
-
-        function callWasmFunction() {
-            let inputData = document.getElementById("inputData").value;
-            let data = inputData.split(',').map(x => x.trim() === "" ? NaN : Number(x)).filter(n => !isNaN(n));
-            const typedArray = Int32Array.from(data);
-            let result = disjoint_intervals(typedArray);
-            document.getElementById("output").innerHTML = result;
-        }
-        window.callWasmFunction = callWasmFunction;
-        init().then(callWasmFunction);
-    </script>
+  <h1>My Web Page</h1>
+  <label for="members">Members</label>
+  <textarea id="members"></textarea>
+  <label for="results">Results</label>
+  <textarea id="results"></textarea>
+  <button onclick="callWasmFunction('Match with City')">Match with City</button>
+  <button onclick="callWasmFunction('Match w/o City')">Match w/o City</button>
+  <label for="matches">Matches</label>
+  <textarea id="matches" readonly></textarea>
 </body>
 </html>

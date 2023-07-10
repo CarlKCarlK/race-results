@@ -16,6 +16,9 @@ alloc = []
 
 [dependencies]
 anyinput = "0.1.6"
+regex = "1.8.4"
+itertools = "0.10.5"
+
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 # include-flate = { path = "../../include-flate" }
@@ -25,8 +28,6 @@ anyinput = "0.1.6"
 wasm-bindgen-test = "0.3.37"
 
 [dev-dependencies]
-itertools = "0.10.5"
-regex = "1.8.4"
 
 [profile.release]
 debug = false
