@@ -320,11 +320,23 @@ fn bad_member_data() {
     let matches = find_matches(
         member_lines,
         result_lines.clone(),
+        result_lines.clone(),
+        include_city,
+    );
+    assert_eq!(
+        matches.map_err(|e| e.to_string()),
+        Err(anyhow!("Line should contain three tab-separated items, not 'aa\tbb'").to_string())
+    );
+
+    let member_lines = "a\tb\tc\naa\tbb*b\tcc\n".lines();
+    let matches = find_matches(
+        member_lines.clone(),
+        result_lines.clone(),
         result_lines,
         include_city,
     );
     assert_eq!(
         matches.map_err(|e| e.to_string()),
-        Err(anyhow!("Line should contain three tab-separated items 'aa\tbb'").to_string())
+        Err(anyhow!("Item 'BB*B' should contain only A-Za-z, '.', and '\''").to_string())
     );
 }

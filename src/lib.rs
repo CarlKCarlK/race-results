@@ -255,7 +255,7 @@ pub fn find_matches(
                 (first, last, city)
             } else {
                 return Err(anyhow!(
-                    "Line should contain three tab-separated items '{line}'"
+                    "Line should contain three tab-separated items, not '{line}'"
                 ));
             };
 
@@ -269,14 +269,14 @@ pub fn find_matches(
             &re,
             &name_to_nickname_set,
             total_nickname,
-        );
+        )?;
         let last_dist = Dist::split_token(
             &last_name,
             total_right,
             &re,
             &name_to_nickname_set,
             total_nickname,
-        );
+        )?;
         let name_dist_list = vec![first_dist, last_dist];
 
         // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
@@ -291,7 +291,7 @@ pub fn find_matches(
                     total_nickname,
                 )
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         let person = Rc::new(Person {
             name_dist_list,
@@ -441,15 +441,18 @@ impl Dist {
         re: &Regex,
         token_to_nickname_set: &HashMap<String, HashSet<String>>,
         total_nickname: f32,
-    ) -> Self {
+    ) -> Result<Self, anyhow::Error> {
+        // cmk0
         assert!(
             total_nickname <= total_right / 2.0,
             "Expect total nickname to be <= than half total_right"
         );
+        // cmk0
         assert!(
             (0.0..=1.0).contains(&total_right),
             "Expect total_right to be between 0 and 1"
         );
+        // cmk0
         assert!(
             (0.0..=1.0).contains(&total_nickname),
             "Expect total_nickname to be between 0 and 1"
@@ -495,16 +498,16 @@ impl Dist {
         // cmk it doesn't make sense to pull out the strings when we had them earlier
         // cmk should return an error rather than panic
         // cmk assert that every first_name_list, last_name, city contains only A-Z cmk update
+        // cmk maybe use compiled regular expressions
         for item in dist.tokens().iter() {
             for c in item.chars() {
-                assert!(
-                    c.is_ascii_alphabetic() || c == '.' || c == '\'',
-                    "bad char in {:?}",
-                    item
-                );
+                if !(c.is_ascii_alphabetic() || c == '.' || c == '\'') {
+                    // cmk0 replace my anyhow format in other places with this
+                    anyhow::bail!("Item '{item}' should contain only A-Za-z, '.', and '\''");
+                }
             }
         }
-        dist
+        Ok(dist)
     }
 
     #[allow(clippy::let_and_return)]
