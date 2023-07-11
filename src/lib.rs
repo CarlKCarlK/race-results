@@ -225,9 +225,12 @@ fn extract_line_people_list(
     name_to_coincidence: &TokenToCoincidence,
     city_to_coincidence: &TokenToCoincidence,
     include_city: bool,
-    prior_points: f32,
     threshold_probability: f32,
+    prob_member_in_race: f32,
 ) -> Vec<LinePeople> {
+    let result_count = results_as_tokens.len();
+    let prior_points = log_odds(prob_member_in_race / result_count as f32);
+
     let mut line_people_list: Vec<LinePeople> = Vec::new();
     for (result_line, result_tokens) in result_lines2.zip(results_as_tokens)
     // .take(100)
@@ -378,11 +381,12 @@ fn extract_token_to_person_list(
 fn find_stop_words(
     include_city: bool,
     name_to_coincidence: &TokenToCoincidence,
-    city_coincidence_default: f32,
     stop_words_points: f32,
     results_as_tokens: &[HashSet<String>],
     total_right: f32,
 ) -> (HashSet<String>, HashSet<String>, TokenToCoincidence) {
+    let city_coincidence_default = 1f32 / (results_as_tokens.len() + 2) as f32;
+
     let result_token_and_line_count_list =
         extract_result_token_and_line_count_list(results_as_tokens);
 
@@ -464,16 +468,12 @@ pub fn find_matches(
     let re = Regex::new(r"[\-/ &\t]+").unwrap();
     let city_to_nickname_set = HashMap::<String, HashSet<String>>::new();
     let name_to_nickname_set = extract_name_to_nicknames_set();
+
     let results_as_tokens = extract_results_as_tokens(result_lines, &re);
-    let result_count = results_as_tokens.len();
-    let prior_prob = prob_member_in_race / result_count as f32;
-    let prior_points = log_odds(prior_prob);
-    let city_coincidence_default = 1f32 / (result_count + 2) as f32;
 
     let (name_stop_words, city_stop_words, city_to_coincidence) = find_stop_words(
         include_city,
         &name_to_coincidence,
-        city_coincidence_default,
         stop_words_points,
         &results_as_tokens,
         total_right,
@@ -498,8 +498,8 @@ pub fn find_matches(
         &name_to_coincidence,
         &city_to_coincidence,
         include_city,
-        prior_points,
         threshold_probability,
+        prob_member_in_race,
     );
 
     let line_list = extract_line_list(line_people_list);
