@@ -5,6 +5,7 @@ use crate::{
     delta_many_names, delta_one, delta_one_name, find_matches, log_odds, prob, read_lines,
     TokenToCoincidence, SAMPLE_MEMBERS_STR, SAMPLE_RESULTS_STR,
 };
+use anyhow::anyhow;
 
 #[test]
 fn notebook() {
@@ -284,6 +285,7 @@ fn sample_data() {
         result_lines,
         include_city,
     );
+    let matches = matches.unwrap();
     for line in matches.iter() {
         println!("{}", line);
     }
@@ -304,6 +306,7 @@ fn spot_check() {
         .unwrap()
         .map(|line| line.unwrap());
     let matches = find_matches(member_lines, result_lines, result_lines2, include_city);
+    let matches = matches.unwrap();
     for line in matches.iter() {
         println!("{}", line);
     }
@@ -320,7 +323,8 @@ fn bad_member_data() {
         result_lines,
         include_city,
     );
-    for line in matches.iter() {
-        println!("{}", line);
-    }
+    assert_eq!(
+        matches.map_err(|e| e.to_string()),
+        Err(anyhow!("Line should contain three tab-separated items 'aa\tbb'").to_string())
+    );
 }

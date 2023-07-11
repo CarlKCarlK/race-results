@@ -17,6 +17,7 @@ fn main() -> io::Result<()> {
     // cmk there should be a tokenize struct, etc.
     let line_list = find_matches(member_lines, result_lines, result_lines2, include_city);
 
+    let line_list = line_list.unwrap();
     for line in line_list.iter() {
         println!("{}", line);
     }

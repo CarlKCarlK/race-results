@@ -6,6 +6,7 @@ mod tests;
 
 extern crate alloc;
 
+use anyhow::anyhow;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::{
@@ -139,7 +140,7 @@ pub fn find_matches(
     result_lines: AnyIter<AnyString>,
     result_lines2: AnyIter<AnyString>,
     include_city: bool,
-) -> Vec<String> {
+) -> Result<Vec<String>, anyhow::Error> {
     let prob_member_in_race = 0.01;
     let total_right = 0.6f32;
     let total_nickname = 0.1f32;
@@ -245,10 +246,19 @@ pub fn find_matches(
     }
     let mut token_to_person_list: HashMap<String, Vec<Rc<Person>>> = HashMap::new();
     for (id, line) in member_lines.enumerate() {
+        let line = line.as_ref();
         // cmk treat first and last more uniformly
         // cmk show a nice error if the line is not tab-separated, three columns
         // cmk println!("line={:?}", line);
-        let (first_name, last_name, city) = line.as_ref().split('\t').collect_tuple().unwrap();
+        let (first_name, last_name, city) =
+            if let Some((first, last, city)) = line.split('\t').collect_tuple() {
+                (first, last, city)
+            } else {
+                return Err(anyhow!(
+                    "Line should contain three tab-separated items '{line}'"
+                ));
+            };
+
         let first_name = first_name.to_uppercase();
         let last_name = last_name.to_uppercase();
         let city = city.to_uppercase();
@@ -395,7 +405,7 @@ pub fn find_matches(
             line_list.push(line);
         }
     }
-    line_list
+    Ok(line_list)
 }
 
 // cmk should O'Neil tokenize to ONEIL?
