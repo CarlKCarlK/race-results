@@ -340,3 +340,20 @@ fn bad_member_data() {
         Err(anyhow!("Item 'BB*B' should contain only A-Za-z, '.', and '\''").to_string())
     );
 }
+
+#[test]
+fn multi_name_cities() {
+    let member_lines = "a\tb\tLake Forest Park\n".lines();
+    let result_lines = SAMPLE_RESULTS_STR.lines();
+    let include_city = true;
+    let matches = find_matches(
+        member_lines,
+        result_lines.clone(),
+        result_lines.clone(),
+        include_city,
+    )
+    .unwrap();
+    for line in matches.iter() {
+        println!("{}", line);
+    }
+}

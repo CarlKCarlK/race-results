@@ -134,27 +134,13 @@ impl TokenToCoincidence {
     }
 }
 
-#[anyinput]
-pub fn find_matches(
-    member_lines: AnyIter<AnyString>,
-    result_lines: AnyIter<AnyString>,
-    result_lines2: AnyIter<AnyString>,
-    include_city: bool,
-) -> Result<Vec<String>, anyhow::Error> {
-    let prob_member_in_race = 0.01;
-    let total_right = 0.6f32;
-    let total_nickname = 0.1f32;
-    let name_to_coincidence = TokenToCoincidence::default_names();
-    let stop_words_points = 3.0f32;
-    let threshold_probability = 0.01f32;
-    let re = Regex::new(r"[\-/ &\t]+").unwrap();
+fn extract_name_to_nicknames_set() -> HashMap<String, HashSet<String>> {
     let mut name_to_nickname_set = HashMap::<String, HashSet<String>>::new();
-    let city_to_nickname_set = HashMap::<String, HashSet<String>>::new();
     for nickname_line in NICKNAMES_STR.lines() {
         // expect one tab
         let left;
         let right;
-        // cmk make this nicers
+        // cmk make this nicer
         if let Some((leftx, rightx)) = nickname_line.split('\t').collect_tuple() {
             left = leftx.to_ascii_uppercase();
             right = rightx.to_ascii_uppercase();
@@ -192,7 +178,12 @@ pub fn find_matches(
             }
         }
     }
-    let results_as_tokens: Vec<HashSet<String>> = result_lines
+    name_to_nickname_set
+}
+
+#[anyinput]
+fn extract_results_as_tokens(result_lines: AnyIter<AnyString>, re: &Regex) -> Vec<HashSet<String>> {
+    result_lines
         .map(|result_line| {
             let result_line = result_line.as_ref().to_ascii_uppercase();
             let token_set: HashSet<String> = re
@@ -203,27 +194,39 @@ pub fn find_matches(
             // println!("token_set={:?}", token_set);
             token_set
         })
-        .collect();
-    let result_count = results_as_tokens.len();
-    let prior_prob = prob_member_in_race / result_count as f32;
-    let prior_points = log_odds(prior_prob);
-    let city_coincidence_default = 1f32 / (result_count + 2) as f32;
-    let result_token_to_line_count =
-        results_as_tokens
-            .iter()
-            .flatten()
-            .fold(HashMap::new(), |mut acc, token| {
-                *acc.entry(token.clone()).or_insert(0) += 1;
-                acc
-            });
-    let mut result_token_to_line_count_vec: Vec<_> = result_token_to_line_count.iter().collect();
-    result_token_to_line_count_vec.sort_by_key(|(_token, count)| -**count);
-    let mut city_stop_words = HashSet::<String>::new();
+        .collect()
+}
+
+// cmk "extract_" is a bad name
+fn extract_result_token_to_line_count(
+    results_as_tokens: &[HashSet<String>],
+    // cmk is is isize so help sorting, but what if we get too many?
+) -> HashMap<String, isize> {
+    results_as_tokens
+        .iter()
+        .flatten()
+        .fold(HashMap::new(), |mut acc, token| {
+            *acc.entry(token.clone()).or_insert(0) += 1;
+            acc
+        })
+}
+
+fn find_stop_words(
+    include_city: bool,
+    name_to_coincidence: &TokenToCoincidence,
+    city_coincidence_default: f32,
+    result_count: usize,
+    stop_words_points: f32,
+    result_token_to_line_count_vec: Vec<(&String, &isize)>,
+    total_right: f32,
+) -> (HashSet<String>, HashSet<String>, TokenToCoincidence) {
     let mut name_stop_words = HashSet::<String>::new();
+    let mut city_stop_words = HashSet::<String>::new();
     let mut city_to_coincidence = TokenToCoincidence {
         token_to_prob: HashMap::new(),
         default: city_coincidence_default,
     };
+
     for (token, count) in result_token_to_line_count_vec.iter() {
         // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
         if include_city {
@@ -236,7 +239,7 @@ pub fn find_matches(
                 city_stop_words.insert(token.to_string());
             }
         }
-        let name_points_contains = delta_one_name(true, token, total_right, &name_to_coincidence);
+        let name_points_contains = delta_one_name(true, token, total_right, name_to_coincidence);
         // let city_points_absent = delta_one(false, city_coincidence, total_right);
         // let name_points_absent = delta_one_name(false, token, total_right, &name_to_coincidence);
         // println!("{token}\t{count}\t{city_points_contains:.2}\t{city_points_absent:.2}\t{name_points_contains:.2}\t{name_points_absent:.2}");
@@ -244,6 +247,42 @@ pub fn find_matches(
             name_stop_words.insert(token.to_string());
         }
     }
+    (name_stop_words, city_stop_words, city_to_coincidence)
+}
+
+#[anyinput]
+pub fn find_matches(
+    member_lines: AnyIter<AnyString>,
+    result_lines: AnyIter<AnyString>,
+    result_lines2: AnyIter<AnyString>,
+    include_city: bool,
+) -> Result<Vec<String>, anyhow::Error> {
+    let prob_member_in_race = 0.01;
+    let total_right = 0.6f32;
+    let total_nickname = 0.1f32;
+    let name_to_coincidence = TokenToCoincidence::default_names();
+    let stop_words_points = 3.0f32;
+    let threshold_probability = 0.01f32;
+    let re = Regex::new(r"[\-/ &\t]+").unwrap();
+    let city_to_nickname_set = HashMap::<String, HashSet<String>>::new();
+    let name_to_nickname_set = extract_name_to_nicknames_set();
+    let results_as_tokens = extract_results_as_tokens(result_lines, &re);
+    let result_count = results_as_tokens.len();
+    let prior_prob = prob_member_in_race / result_count as f32;
+    let prior_points = log_odds(prior_prob);
+    let city_coincidence_default = 1f32 / (result_count + 2) as f32;
+    let result_token_to_line_count = extract_result_token_to_line_count(&results_as_tokens);
+    let mut result_token_to_line_count_vec: Vec<_> = result_token_to_line_count.iter().collect();
+    result_token_to_line_count_vec.sort_by_key(|(_token, count)| -**count);
+    let (name_stop_words, city_stop_words, city_to_coincidence) = find_stop_words(
+        include_city,
+        &name_to_coincidence,
+        city_coincidence_default,
+        result_count,
+        stop_words_points,
+        result_token_to_line_count_vec,
+        total_right,
+    );
     let mut token_to_person_list: HashMap<String, Vec<Rc<Person>>> = HashMap::new();
     for (id, line) in member_lines.enumerate() {
         let line = line.as_ref();
@@ -621,3 +660,5 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 // cmk give users sliders for prob threshold? and priors? etc.
 // cmk see the work doc for a mock up of the output
 // cmk link: https://carlkcarlk.github.io/race-results/matcher/v0.1.0/index.html
+// cmk it's hard to insert tabs in an textarea
+// cmk0 it seems to give too much weight to city matches with multi-part cities. E.g. esr2012 and sample results, forest park and des moines and mill creek
