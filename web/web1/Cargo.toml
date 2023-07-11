@@ -1,6 +1,6 @@
 [package]
 name = "web1"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [lib]
@@ -8,6 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wasm-bindgen = "0.2"
+# cmk are features still needed?
 race-results = { path = "../..", features = [
     "alloc",
 ], default-features = false }

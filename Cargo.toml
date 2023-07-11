@@ -9,6 +9,7 @@ name = "race_results"
 [workspace]
 members = [".", "web/web1"]
 
+# cmk are features still needed?
 [features]
 default = ["std"]
 std = []
@@ -20,13 +21,8 @@ regex = "1.8.4"
 itertools = "0.10.5"
 include-flate = "0.2.0"
 
-
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3.37"
-
-[dev-dependencies]
 
 [profile.release]
 debug = false
