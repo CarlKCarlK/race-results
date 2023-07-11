@@ -198,17 +198,22 @@ fn extract_results_as_tokens(result_lines: AnyIter<AnyString>, re: &Regex) -> Ve
 }
 
 // cmk "extract_" is a bad name
-fn extract_result_token_to_line_count(
+fn extract_result_token_and_line_count_list(
     results_as_tokens: &[HashSet<String>],
     // cmk is is isize so help sorting, but what if we get too many?
-) -> HashMap<String, isize> {
-    results_as_tokens
-        .iter()
-        .flatten()
-        .fold(HashMap::new(), |mut acc, token| {
-            *acc.entry(token.clone()).or_insert(0) += 1;
-            acc
-        })
+) -> Vec<(String, isize)> {
+    let result_token_to_line_count =
+        results_as_tokens
+            .iter()
+            .flatten()
+            .fold(HashMap::new(), |mut acc, token| {
+                *acc.entry(token.clone()).or_insert(0) += 1;
+                acc
+            });
+    let mut result_token_to_line_count_vec: Vec<(String, isize)> =
+        result_token_to_line_count.into_iter().collect();
+    result_token_to_line_count_vec.sort_by_key(|(_token, count)| -*count);
+    result_token_to_line_count_vec
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -374,11 +379,13 @@ fn find_stop_words(
     include_city: bool,
     name_to_coincidence: &TokenToCoincidence,
     city_coincidence_default: f32,
-    result_count: usize,
     stop_words_points: f32,
-    result_token_to_line_count_vec: Vec<(&String, &isize)>,
+    results_as_tokens: &[HashSet<String>],
     total_right: f32,
 ) -> (HashSet<String>, HashSet<String>, TokenToCoincidence) {
+    let result_token_and_line_count_list =
+        extract_result_token_and_line_count_list(results_as_tokens);
+
     let mut name_stop_words = HashSet::<String>::new();
     let mut city_stop_words = HashSet::<String>::new();
     let mut city_to_coincidence = TokenToCoincidence {
@@ -386,9 +393,10 @@ fn find_stop_words(
         default: city_coincidence_default,
     };
 
-    for (token, count) in result_token_to_line_count_vec.iter() {
+    for (token, count) in result_token_and_line_count_list.iter() {
         // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
         if include_city {
+            let result_count = results_as_tokens.len();
             let city_coincidence = (*count + 1) as f32 / (result_count + 2) as f32;
             city_to_coincidence
                 .token_to_prob
@@ -461,18 +469,16 @@ pub fn find_matches(
     let prior_prob = prob_member_in_race / result_count as f32;
     let prior_points = log_odds(prior_prob);
     let city_coincidence_default = 1f32 / (result_count + 2) as f32;
-    let result_token_to_line_count = extract_result_token_to_line_count(&results_as_tokens);
-    let mut result_token_to_line_count_vec: Vec<_> = result_token_to_line_count.iter().collect();
-    result_token_to_line_count_vec.sort_by_key(|(_token, count)| -**count);
+
     let (name_stop_words, city_stop_words, city_to_coincidence) = find_stop_words(
         include_city,
         &name_to_coincidence,
         city_coincidence_default,
-        result_count,
         stop_words_points,
-        result_token_to_line_count_vec,
+        &results_as_tokens,
         total_right,
     );
+
     let token_to_person_list = extract_token_to_person_list(
         member_lines,
         total_right,
