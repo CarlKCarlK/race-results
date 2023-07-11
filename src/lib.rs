@@ -182,7 +182,7 @@ fn extract_name_to_nicknames_set() -> HashMap<String, HashSet<String>> {
 }
 
 #[anyinput]
-fn extract_results_as_tokens(result_lines: AnyIter<AnyString>, re: &Regex) -> Vec<HashSet<String>> {
+fn tokenize_race_results(result_lines: AnyIter<AnyString>, re: &Regex) -> Vec<HashSet<String>> {
     result_lines
         .map(|result_line| {
             let result_line = result_line.as_ref().to_ascii_uppercase();
@@ -294,12 +294,13 @@ fn extract_token_to_person_list(
     total_right: f32,
     total_nickname: f32,
     re: &Regex,
-    name_to_nickname_set: HashMap<String, HashSet<String>>,
-    city_to_nickname_set: HashMap<String, HashSet<String>>,
     name_stop_words: HashSet<String>,
     city_stop_words: HashSet<String>,
     include_city: bool,
 ) -> Result<HashMap<String, Vec<Rc<Person>>>, anyhow::Error> {
+    let city_to_nickname_set = HashMap::<String, HashSet<String>>::new();
+    let name_to_nickname_set = extract_name_to_nicknames_set();
+
     let mut token_to_person_list = HashMap::new();
     for (id, line) in member_lines.enumerate() {
         let line = line.as_ref();
@@ -411,9 +412,6 @@ fn find_stop_words(
             }
         }
         let name_points_contains = delta_one_name(true, token, total_right, name_to_coincidence);
-        // let city_points_absent = delta_one(false, city_coincidence, total_right);
-        // let name_points_absent = delta_one_name(false, token, total_right, &name_to_coincidence);
-        // println!("{token}\t{count}\t{city_points_contains:.2}\t{city_points_absent:.2}\t{name_points_contains:.2}\t{name_points_absent:.2}");
         if name_points_contains < stop_words_points {
             name_stop_words.insert(token.to_string());
         }
@@ -466,10 +464,8 @@ pub fn find_matches(
     let stop_words_points = 3.0f32;
     let threshold_probability = 0.01f32;
     let re = Regex::new(r"[\-/ &\t]+").unwrap();
-    let city_to_nickname_set = HashMap::<String, HashSet<String>>::new();
-    let name_to_nickname_set = extract_name_to_nicknames_set();
 
-    let results_as_tokens = extract_results_as_tokens(result_lines, &re);
+    let results_as_tokens = tokenize_race_results(result_lines, &re);
 
     let (name_stop_words, city_stop_words, city_to_coincidence) = find_stop_words(
         include_city,
@@ -484,8 +480,6 @@ pub fn find_matches(
         total_right,
         total_nickname,
         &re,
-        name_to_nickname_set,
-        city_to_nickname_set,
         name_stop_words,
         city_stop_words,
         include_city,
