@@ -14,9 +14,13 @@
   </style>
 </head>
 
-<body data-server-no-reload>
-  <h1>Race Results</h1>
-  <label for="members">Members, can load from </label>
+<body>
+   <!-- data-server-no-reload> -->
+   <div style="display: flex; justify-content: space-between; align-items: center;">
+    <h1>Race Results</h1>
+    <a href="../" style="font-size: small; font-style: italic;">Latest version</a>
+  </div>
+    <label for="members">Members, can load from </label>
   <input type="file" id="membersFile" accept=".txt,.tsv" onchange="loadMembersFromFile()">
   <textarea id="members" rows="4"></textarea>
   <p></p>
