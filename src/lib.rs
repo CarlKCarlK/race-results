@@ -29,10 +29,10 @@ pub fn delta_one_name(
     contains: bool,
     name: &str,
     prob_right: f32,
-    name_to_conincidence: &TokenToCoincidence,
+    name_to_coincidence: &TokenToCoincidence,
 ) -> f32 {
     // cmk what if not found?
-    let prob_coincidence = name_to_conincidence.prob(name);
+    let prob_coincidence = name_to_coincidence.prob(name);
     delta_one(contains, prob_coincidence, prob_right)
 }
 
@@ -41,13 +41,13 @@ pub fn delta_many_names(
     contains_list: &[bool],
     name_list: AnyArray<AnyString>,
     prob_right_list: &[f32],
-    name_to_conincidence: &TokenToCoincidence,
+    name_to_coincidence: &TokenToCoincidence,
 ) -> f32 {
     // cmk what if not found?
     // cmk why bother with collect?
     let prob_coincidence_list: Vec<_> = name_list
         .iter()
-        .map(|name| name_to_conincidence.prob(name.as_ref()))
+        .map(|name| name_to_coincidence.prob(name.as_ref()))
         .collect();
     delta_many(contains_list, &prob_coincidence_list, prob_right_list)
 }
@@ -111,19 +111,19 @@ flate!(pub static SAMPLE_RESULTS_STR: str from "../../../Shares/RaceResults/samp
 
 impl TokenToCoincidence {
     pub fn default_names() -> Self {
-        let mut name_to_conincidence = HashMap::new();
+        let mut name_to_coincidence = HashMap::new();
         for line in NAME_TO_PROB_STR.lines().skip(1) {
             let parts: Vec<&str> = line.split('\t').collect();
             let name = parts[0];
             let prob = parts[1].parse::<f32>().unwrap();
-            name_to_conincidence.insert(name.to_string(), prob);
+            name_to_coincidence.insert(name.to_string(), prob);
         }
-        let min_prob = *name_to_conincidence
+        let min_prob = *name_to_coincidence
             .values()
             .min_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap();
         Self {
-            token_to_prob: name_to_conincidence,
+            token_to_prob: name_to_coincidence,
             default: min_prob,
         }
     }
@@ -209,6 +209,74 @@ fn extract_result_token_to_line_count(
             *acc.entry(token.clone()).or_insert(0) += 1;
             acc
         })
+}
+
+#[allow(clippy::too_many_arguments)]
+#[anyinput]
+fn extract_line_people_list(
+    result_lines2: AnyIter<AnyString>,
+    results_as_tokens: &[HashSet<String>],
+    token_to_person_list: &HashMap<String, Vec<Rc<Person>>>,
+    name_to_coincidence: &TokenToCoincidence,
+    city_to_coincidence: &TokenToCoincidence,
+    include_city: bool,
+    prior_points: f32,
+    threshold_probability: f32,
+) -> Vec<LinePeople> {
+    let mut line_people_list: Vec<LinePeople> = Vec::new();
+    for (result_line, result_tokens) in result_lines2.zip(results_as_tokens)
+    // .take(100)
+    {
+        // let cmk = result_line.as_ref().clone();
+        // if cmk.contains("test") {
+        //     println!("result_line");
+        // }
+        let person_set = result_tokens
+            .iter()
+            .filter_map(|token| token_to_person_list.get(token))
+            .flatten()
+            .collect::<HashSet<_>>();
+
+        let mut line_people: Option<LinePeople> = None;
+        for person in person_set.iter() {
+            let person = *person;
+
+            let name_points_sum = person.name_points(result_tokens, name_to_coincidence);
+            let city_points_sum = if include_city {
+                person.city_points(result_tokens, city_to_coincidence)
+            } else {
+                0.0
+            };
+
+            let post_points = prior_points + name_points_sum + city_points_sum;
+
+            let post_prob = prob(post_points);
+
+            if post_prob > threshold_probability {
+                // println!(
+                //     "cmk {person:?} {post_points:.2} {post_prob:.2} {}",
+                //     result_line.as_ref()
+                // );
+                if let Some(line_people) = &mut line_people {
+                    line_people.max_prob = line_people.max_prob.max(post_prob);
+                    line_people
+                        .person_prob_list
+                        .push((person.clone(), post_prob));
+                } else {
+                    line_people = Some(LinePeople {
+                        line: result_line.as_ref().to_string(),
+                        max_prob: post_prob,
+                        person_prob_list: vec![(person.clone(), post_prob)],
+                    });
+                }
+            }
+        }
+        if let Some(line_people) = line_people {
+            line_people_list.push(line_people);
+        }
+    }
+    line_people_list.sort_by(|a, b| b.max_prob.partial_cmp(&a.max_prob).unwrap());
+    line_people_list
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -341,6 +409,37 @@ fn find_stop_words(
     (name_stop_words, city_stop_words, city_to_coincidence)
 }
 
+fn extract_line_list(line_people_list: Vec<LinePeople>) -> Vec<String> {
+    let mut line_list = Vec::new();
+    for line_people in line_people_list.iter() {
+        let line = format!("{}", line_people.line);
+        line_list.push(line);
+        let mut person_prob_list = line_people.person_prob_list.clone();
+        // sort by prob
+        person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        for (person, prob) in person_prob_list.iter() {
+            let line = format!(
+                "   {:.2} {:?} {:?}",
+                // cmk if this is useful, make it a method
+                prob,
+                person
+                    .name_dist_list
+                    .iter()
+                    .map(|name_dist| name_dist.tokens())
+                    .collect_vec(),
+                // cmk if this is useful, make it a method
+                person
+                    .city_dist_list
+                    .iter()
+                    .map(|city_dist| city_dist.tokens())
+                    .collect_vec(),
+            );
+            line_list.push(line);
+        }
+    }
+    line_list
+}
+
 #[anyinput]
 pub fn find_matches(
     member_lines: AnyIter<AnyString>,
@@ -386,86 +485,19 @@ pub fn find_matches(
         include_city,
     )?;
 
-    let mut line_people_list: Vec<LinePeople> = Vec::new();
-    for (result_line, result_tokens) in result_lines2.zip(results_as_tokens)
-    // .take(100)
-    {
-        // let cmk = result_line.as_ref().clone();
-        // if cmk.contains("test") {
-        //     println!("result_line");
-        // }
-        let person_set = result_tokens
-            .iter()
-            .filter_map(|token| token_to_person_list.get(token))
-            .flatten()
-            .collect::<HashSet<_>>();
+    let line_people_list = extract_line_people_list(
+        result_lines2,
+        &results_as_tokens,
+        &token_to_person_list,
+        &name_to_coincidence,
+        &city_to_coincidence,
+        include_city,
+        prior_points,
+        threshold_probability,
+    );
 
-        let mut line_people: Option<LinePeople> = None;
-        for person in person_set.iter() {
-            let person = *person;
+    let line_list = extract_line_list(line_people_list);
 
-            let name_points_sum = person.name_points(&result_tokens, &name_to_coincidence);
-            let city_points_sum = if include_city {
-                person.city_points(&result_tokens, &city_to_coincidence)
-            } else {
-                0.0
-            };
-
-            let post_points = prior_points + name_points_sum + city_points_sum;
-
-            let post_prob = prob(post_points);
-
-            if post_prob > threshold_probability {
-                // println!(
-                //     "cmk {person:?} {post_points:.2} {post_prob:.2} {}",
-                //     result_line.as_ref()
-                // );
-                if let Some(line_people) = &mut line_people {
-                    line_people.max_prob = line_people.max_prob.max(post_prob);
-                    line_people
-                        .person_prob_list
-                        .push((person.clone(), post_prob));
-                } else {
-                    line_people = Some(LinePeople {
-                        line: result_line.as_ref().to_string(),
-                        max_prob: post_prob,
-                        person_prob_list: vec![(person.clone(), post_prob)],
-                    });
-                }
-            }
-        }
-        if let Some(line_people) = line_people {
-            line_people_list.push(line_people);
-        }
-    }
-    let mut line_list = Vec::new();
-    line_people_list.sort_by(|a, b| b.max_prob.partial_cmp(&a.max_prob).unwrap());
-    for line_people in line_people_list.iter() {
-        let line = format!("{}", line_people.line);
-        line_list.push(line);
-        let mut person_prob_list = line_people.person_prob_list.clone();
-        // sort by prob
-        person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        for (person, prob) in person_prob_list.iter() {
-            let line = format!(
-                "   {:.2} {:?} {:?}",
-                // cmk if this is useful, make it a method
-                prob,
-                person
-                    .name_dist_list
-                    .iter()
-                    .map(|name_dist| name_dist.tokens())
-                    .collect_vec(),
-                // cmk if this is useful, make it a method
-                person
-                    .city_dist_list
-                    .iter()
-                    .map(|city_dist| city_dist.tokens())
-                    .collect_vec(),
-            );
-            line_list.push(line);
-        }
-    }
     Ok(line_list)
 }
 
