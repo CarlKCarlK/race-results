@@ -211,6 +211,97 @@ fn extract_result_token_to_line_count(
         })
 }
 
+#[allow(clippy::too_many_arguments)]
+#[anyinput]
+fn extract_token_to_person_list(
+    member_lines: AnyIter<AnyString>,
+    total_right: f32,
+    total_nickname: f32,
+    re: &Regex,
+    name_to_nickname_set: HashMap<String, HashSet<String>>,
+    city_to_nickname_set: HashMap<String, HashSet<String>>,
+    name_stop_words: HashSet<String>,
+    city_stop_words: HashSet<String>,
+    include_city: bool,
+) -> Result<HashMap<String, Vec<Rc<Person>>>, anyhow::Error> {
+    let mut token_to_person_list = HashMap::new();
+    for (id, line) in member_lines.enumerate() {
+        let line = line.as_ref();
+        // cmk treat first and last more uniformly
+        // cmk show a nice error if the line is not tab-separated, three columns
+        // cmk println!("line={:?}", line);
+        let (first_name, last_name, city) =
+            if let Some((first, last, city)) = line.split('\t').collect_tuple() {
+                (first, last, city)
+            } else {
+                return Err(anyhow!(
+                    "Line should contain three tab-separated items, not '{line}'"
+                ));
+            };
+
+        let first_name = first_name.to_uppercase();
+        let last_name = last_name.to_uppercase();
+        let city = city.to_uppercase();
+
+        let first_dist = Dist::split_token(
+            &first_name,
+            total_right,
+            re,
+            &name_to_nickname_set,
+            total_nickname,
+        )?;
+        let last_dist = Dist::split_token(
+            &last_name,
+            total_right,
+            re,
+            &name_to_nickname_set,
+            total_nickname,
+        )?;
+        let name_dist_list = vec![first_dist, last_dist];
+
+        // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
+        let city_dist_list = city
+            .split_ascii_whitespace()
+            .map(|city| {
+                Dist::split_token(city, total_right, re, &city_to_nickname_set, total_nickname)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let person = Rc::new(Person {
+            name_dist_list,
+            city_dist_list,
+            id,
+        });
+        // cmk is there a way to avoid cloning keys?
+        // cmk change for loop to use functional
+        for name_dist in person.name_dist_list.iter() {
+            for name in name_dist.tokens().iter() {
+                if name_stop_words.contains(name) {
+                    continue;
+                }
+                token_to_person_list
+                    .entry(first_name.clone())
+                    .or_insert(Vec::new())
+                    .push(person.clone());
+            }
+        }
+
+        if include_city {
+            for city_dist in person.city_dist_list.iter() {
+                for city in city_dist.tokens().iter() {
+                    if !city_stop_words.contains(city) {
+                        token_to_person_list
+                            .entry(city.clone())
+                            .or_insert(Vec::new())
+                            .push(person.clone());
+                    }
+                }
+            }
+        }
+    }
+    Ok(token_to_person_list)
+}
+
 fn find_stop_words(
     include_city: bool,
     name_to_coincidence: &TokenToCoincidence,
@@ -283,87 +374,18 @@ pub fn find_matches(
         result_token_to_line_count_vec,
         total_right,
     );
-    let mut token_to_person_list: HashMap<String, Vec<Rc<Person>>> = HashMap::new();
-    for (id, line) in member_lines.enumerate() {
-        let line = line.as_ref();
-        // cmk treat first and last more uniformly
-        // cmk show a nice error if the line is not tab-separated, three columns
-        // cmk println!("line={:?}", line);
-        let (first_name, last_name, city) =
-            if let Some((first, last, city)) = line.split('\t').collect_tuple() {
-                (first, last, city)
-            } else {
-                return Err(anyhow!(
-                    "Line should contain three tab-separated items, not '{line}'"
-                ));
-            };
+    let token_to_person_list = extract_token_to_person_list(
+        member_lines,
+        total_right,
+        total_nickname,
+        &re,
+        name_to_nickname_set,
+        city_to_nickname_set,
+        name_stop_words,
+        city_stop_words,
+        include_city,
+    )?;
 
-        let first_name = first_name.to_uppercase();
-        let last_name = last_name.to_uppercase();
-        let city = city.to_uppercase();
-
-        let first_dist = Dist::split_token(
-            &first_name,
-            total_right,
-            &re,
-            &name_to_nickname_set,
-            total_nickname,
-        )?;
-        let last_dist = Dist::split_token(
-            &last_name,
-            total_right,
-            &re,
-            &name_to_nickname_set,
-            total_nickname,
-        )?;
-        let name_dist_list = vec![first_dist, last_dist];
-
-        // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
-        let city_dist_list = city
-            .split_ascii_whitespace()
-            .map(|city| {
-                Dist::split_token(
-                    city,
-                    total_right,
-                    &re,
-                    &city_to_nickname_set,
-                    total_nickname,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let person = Rc::new(Person {
-            name_dist_list,
-            city_dist_list,
-            id,
-        });
-        // cmk is there a way to avoid cloning keys?
-        // cmk change for loop to use functional
-        for name_dist in person.name_dist_list.iter() {
-            for name in name_dist.tokens().iter() {
-                if name_stop_words.contains(name) {
-                    continue;
-                }
-                token_to_person_list
-                    .entry(first_name.clone())
-                    .or_insert(Vec::new())
-                    .push(person.clone());
-            }
-        }
-
-        if include_city {
-            for city_dist in person.city_dist_list.iter() {
-                for city in city_dist.tokens().iter() {
-                    if !city_stop_words.contains(city) {
-                        token_to_person_list
-                            .entry(city.clone())
-                            .or_insert(Vec::new())
-                            .push(person.clone());
-                    }
-                }
-            }
-        }
-    }
     let mut line_people_list: Vec<LinePeople> = Vec::new();
     for (result_line, result_tokens) in result_lines2.zip(results_as_tokens)
     // .take(100)
