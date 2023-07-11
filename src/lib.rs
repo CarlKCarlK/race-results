@@ -201,7 +201,7 @@ fn tokenize_race_results(result_lines: AnyIter<AnyString>, re: &Regex) -> Vec<Ha
 fn extract_result_token_and_line_count_list(
     results_as_tokens: &[HashSet<String>],
     // cmk is is isize so help sorting, but what if we get too many?
-) -> Vec<(String, isize)> {
+) -> HashMap<String, usize> {
     let result_token_to_line_count =
         results_as_tokens
             .iter()
@@ -210,15 +210,16 @@ fn extract_result_token_and_line_count_list(
                 *acc.entry(token.clone()).or_insert(0) += 1;
                 acc
             });
-    let mut result_token_to_line_count_vec: Vec<(String, isize)> =
-        result_token_to_line_count.into_iter().collect();
-    result_token_to_line_count_vec.sort_by_key(|(_token, count)| -*count);
-    result_token_to_line_count_vec
+    // let mut result_token_to_line_count_vec: Vec<(String, isize)> =
+    //     result_token_to_line_count.into_iter().collect();
+    // result_token_to_line_count_vec.sort_by_key(|(_token, count)| -*count);
+    // result_token_to_line_count_vec
+    result_token_to_line_count
 }
 
 #[allow(clippy::too_many_arguments)]
 #[anyinput]
-fn extract_line_people_list(
+fn find_matching_people_for_each_result_line(
     result_lines2: AnyIter<AnyString>,
     results_as_tokens: &[HashSet<String>],
     token_to_person_list: &HashMap<String, Vec<Rc<Person>>>,
@@ -289,7 +290,7 @@ fn extract_line_people_list(
 
 #[allow(clippy::too_many_arguments)]
 #[anyinput]
-fn extract_token_to_person_list(
+fn index_person_list(
     member_lines: AnyIter<AnyString>,
     total_right: f32,
     total_nickname: f32,
@@ -419,7 +420,7 @@ fn find_stop_words(
     (name_stop_words, city_stop_words, city_to_coincidence)
 }
 
-fn extract_line_list(line_people_list: Vec<LinePeople>) -> Vec<String> {
+fn format_final_output(line_people_list: Vec<LinePeople>) -> Vec<String> {
     let mut line_list = Vec::new();
     for line_people in line_people_list.iter() {
         let line = format!("{}", line_people.line);
@@ -467,6 +468,7 @@ pub fn find_matches(
 
     let results_as_tokens = tokenize_race_results(result_lines, &re);
 
+    // from the tokens in the race results, look for one's that are too common to be useful
     let (name_stop_words, city_stop_words, city_to_coincidence) = find_stop_words(
         include_city,
         &name_to_coincidence,
@@ -475,7 +477,7 @@ pub fn find_matches(
         total_right,
     );
 
-    let token_to_person_list = extract_token_to_person_list(
+    let token_to_person_list = index_person_list(
         member_lines,
         total_right,
         total_nickname,
@@ -485,7 +487,7 @@ pub fn find_matches(
         include_city,
     )?;
 
-    let line_people_list = extract_line_people_list(
+    let line_people_list = find_matching_people_for_each_result_line(
         result_lines2,
         &results_as_tokens,
         &token_to_person_list,
@@ -496,9 +498,9 @@ pub fn find_matches(
         prob_member_in_race,
     );
 
-    let line_list = extract_line_list(line_people_list);
+    let final_output = format_final_output(line_people_list);
 
-    Ok(line_list)
+    Ok(final_output)
 }
 
 // cmk should O'Neil tokenize to ONEIL?
@@ -629,22 +631,19 @@ struct Person {
 }
 
 impl Person {
-    fn points(
-        dist_list: &[Dist],
-        result_tokens: &HashSet<String>,
-        to_coincidence: &TokenToCoincidence,
-    ) -> f32 {
-        dist_list
-            .iter()
-            .map(|dist| {
-                let contains_list: Vec<_> = dist
-                    .tokens()
-                    .iter()
-                    .map(|token| result_tokens.contains(token))
-                    .collect();
-                dist.delta(&contains_list, to_coincidence)
-            })
-            .sum()
+    fn points<'a>(
+        dist_list: &'a [Dist],
+        result_tokens: &'a HashSet<String>,
+        to_coincidence: &'a TokenToCoincidence,
+    ) -> impl Iterator<Item = f32> + 'a {
+        dist_list.iter().map(move |dist| {
+            let contains_list: Vec<_> = dist
+                .tokens()
+                .iter()
+                .map(|token| result_tokens.contains(token))
+                .collect();
+            dist.delta(&contains_list, to_coincidence)
+        })
     }
 
     pub fn name_points(
@@ -652,7 +651,7 @@ impl Person {
         result_tokens: &HashSet<String>,
         name_to_coincidence: &TokenToCoincidence,
     ) -> f32 {
-        Person::points(&self.name_dist_list, result_tokens, name_to_coincidence)
+        Person::points(&self.name_dist_list, result_tokens, name_to_coincidence).sum()
     }
 
     pub fn city_points(
@@ -661,6 +660,8 @@ impl Person {
         city_to_coincidence: &TokenToCoincidence,
     ) -> f32 {
         Person::points(&self.city_dist_list, result_tokens, city_to_coincidence)
+            .reduce(|a, b| a.max(b))
+            .unwrap() // cmk we assume always at least one city
     }
 }
 
@@ -716,3 +717,5 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 // cmk link: https://carlkcarlk.github.io/race-results/matcher/v0.1.0/index.html
 // cmk it's hard to insert tabs in an textarea
 // cmk0 it seems to give too much weight to city matches with multi-part cities. E.g. esr2012 and sample results, forest park and des moines and mill creek
+// cmk we use name_to_coincidence twice, but we could use it once.
+// cmk will every ESR member be listed when looking at the NYC marathon because 'redmond', etc is rare in the results?
