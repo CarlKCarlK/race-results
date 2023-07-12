@@ -327,18 +327,21 @@ impl Config {
                     //     "cmk {person:?} {post_points:.2} {post_prob:.2} {}",
                     //     result_line.as_ref()
                     // );
-                    if let Some(line_people) = &mut line_people {
-                        line_people.max_prob = line_people.max_prob.max(post_prob);
-                        line_people
-                            .person_prob_list
-                            .push((person.clone(), post_prob));
-                    } else {
-                        line_people = Some(LinePeople {
-                            line: result_line.as_ref().to_string(),
-                            max_prob: post_prob,
-                            person_prob_list: vec![(person.clone(), post_prob)],
-                        });
-                    }
+                    match &mut line_people {
+                        None => {
+                            line_people = Some(LinePeople {
+                                line: result_line.as_ref().to_string(),
+                                max_prob: post_prob,
+                                person_prob_list: vec![(person.clone(), post_prob)],
+                            })
+                        }
+                        Some(line_people) => {
+                            line_people.max_prob = line_people.max_prob.max(post_prob);
+                            line_people
+                                .person_prob_list
+                                .push((person.clone(), post_prob));
+                        }
+                    };
                 }
             }
             if let Some(line_people) = line_people {
@@ -493,7 +496,7 @@ impl Config {
                         continue;
                     }
                     token_to_person_list
-                        .entry(first_name.clone())
+                        .entry(name.clone())
                         .or_insert(Vec::new())
                         .push(person.clone());
                 }
@@ -736,3 +739,4 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 // cmk will every ESR member be listed when looking at the NYC marathon because 'redmond', etc is rare in the results?
 // cmk there must be a way to handle the city/vs not automatically.
 // cmk accept commas too
+// cmk create better sample data

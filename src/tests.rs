@@ -360,11 +360,32 @@ fn multi_name_cities() {
 
 #[test]
 fn multi_part_names() {
+    // cmk
+    // let member_lines = "Rob Roy\tSmith\tSeattle\n".lines(); //Jaime\tHerrera-Beutler\tKirkland\nSheila Bob\tJackson Lee\tBellevue\n
+    // let result_lines = "2120	Rob Roy Smith	Seattle	Male	Male 45-49	3:52:38\n".lines();
+    // let include_city = true;
+    // let matches = Config {
+    //     // threshold_probability: 0.0,
+    //     override_results_count: Some(1081),
+    //     ..Config::default()
+    // }
+    // .find_matches(
+    //     member_lines,
+    //     result_lines.clone(),
+    //     result_lines.clone(),
+    //     include_city,
+    // )
+    // .unwrap();
+    // for line in matches.iter() {
+    //     println!("{line}");
+    // }
+    // assert_eq!(matches.len(), 2);
+
     let member_lines = "Rob Roy\tSmith\tSeattle\n".lines(); //Jaime\tHerrera-Beutler\tKirkland\nSheila Bob\tJackson Lee\tBellevue\n
-    let result_lines = "2120	Rob Roy Smith	Seattle	Male	Male 45-49	3:52:38\n".lines();
+    let result_lines = SAMPLE_RESULTS_STR.lines();
     let include_city = true;
     let matches = Config {
-        // threshold_probability: 0.0,
+        threshold_probability: 0.0,
         override_results_count: Some(1081),
         ..Config::default()
     }
@@ -378,5 +399,5 @@ fn multi_part_names() {
     for line in matches.iter() {
         println!("{line}");
     }
-    assert_eq!(matches.len(), 2);
+    assert_eq!(matches.len(), 12);
 }
