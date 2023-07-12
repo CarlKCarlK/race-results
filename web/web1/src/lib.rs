@@ -6,7 +6,12 @@ use wasm_bindgen::prelude::*;
 pub fn member_match(members: &str, race_results: &str, include_city: bool) -> JsValue {
     // cmk using catch_unwind isn't nice
     // cmk the work 'result' is used in two different ways here
-    let function_result = Config::default().find_matches(
+    let function_result = Config {
+        threshold_probability: 0.0,
+        override_results_count: Some(1081),
+        ..Config::default()
+    }
+    .find_matches(
         members.lines(),
         race_results.lines(),
         race_results.lines(),

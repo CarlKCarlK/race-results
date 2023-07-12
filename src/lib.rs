@@ -25,6 +25,12 @@ use core::{f32::consts::E, iter::repeat};
 use itertools::Itertools;
 use regex::Regex;
 
+// // cmk file is not local
+flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/name_probability.tsv");
+flate!(static NICKNAMES_STR: str from "examples/nicknames.txt");
+flate!(pub static SAMPLE_MEMBERS_STR: str from "../../../Shares/RaceResults/sample_members.no_nicknames.tsv");
+flate!(pub static SAMPLE_RESULTS_STR: str from "../../../Shares/RaceResults/sample_results_withcity.txt");
+
 pub fn delta_one_name(
     contains: bool,
     name: &str,
@@ -103,12 +109,6 @@ pub struct TokenToCoincidence {
     pub default: f32,
 }
 
-// // cmk file is not local
-flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/name_probability.tsv");
-flate!(static NICKNAMES_STR: str from "examples/nicknames.txt");
-flate!(pub static SAMPLE_MEMBERS_STR: str from "../../../Shares/RaceResults/sample_members.no_nicknames.tsv");
-flate!(pub static SAMPLE_RESULTS_STR: str from "../../../Shares/RaceResults/sample_results_withcity.txt");
-
 impl TokenToCoincidence {
     pub fn default_names() -> Self {
         let mut name_to_coincidence = HashMap::new();
@@ -182,13 +182,14 @@ fn extract_name_to_nicknames_set() -> HashMap<String, HashSet<String>> {
 }
 
 pub struct Config {
-    prob_member_in_race: f32,
-    total_right: f32,
-    total_nickname: f32,
-    name_to_coincidence: TokenToCoincidence,
-    stop_words_points: f32,
-    re: Regex,
-    threshold_probability: f32,
+    pub prob_member_in_race: f32,
+    pub total_right: f32,
+    pub total_nickname: f32,
+    pub name_to_coincidence: TokenToCoincidence,
+    pub stop_words_points: f32,
+    pub re: Regex,
+    pub threshold_probability: f32,
+    pub override_results_count: Option<usize>,
 }
 
 impl Default for Config {
@@ -201,6 +202,7 @@ impl Default for Config {
             stop_words_points: 3.0,
             re: Regex::new(r"[\-/ &\t]+").unwrap(),
             threshold_probability: 0.01,
+            override_results_count: None,
         }
     }
 }
@@ -288,8 +290,8 @@ impl Config {
         city_to_coincidence: &TokenToCoincidence,
         include_city: bool,
     ) -> Vec<LinePeople> {
-        let result_count = results_as_tokens.len();
-        let prior_points = log_odds(self.prob_member_in_race / result_count as f32);
+        let results_count = self.extract_results_count(results_as_tokens);
+        let prior_points = log_odds(self.prob_member_in_race / results_count as f32);
 
         let mut line_people_list: Vec<LinePeople> = Vec::new();
         for (result_line, result_tokens) in result_lines2.zip(results_as_tokens)
@@ -351,12 +353,12 @@ impl Config {
     // cmk should tokens be there own type?
     fn extract_dist_list(
         &self,
-        token: &str,
+        name_or_city: &str,
         token_to_nickname_set: &HashMap<String, HashSet<String>>,
     ) -> Result<Vec<Dist>, anyhow::Error> {
-        token
+        name_or_city
             .split(|c: char| c.is_whitespace() || c == '-')
-            .map(|city| self.split_token(city, token_to_nickname_set))
+            .map(|token| self.split_token(token, token_to_nickname_set))
             .collect::<Result<Vec<_>, _>>()
     }
 
@@ -513,12 +515,20 @@ impl Config {
         Ok(token_to_person_list)
     }
 
+    fn extract_results_count(&self, results_as_tokens: &[HashSet<String>]) -> usize {
+        match self.override_results_count {
+            Some(results_count) => results_count,
+            None => results_as_tokens.len(),
+        }
+    }
+
     fn find_stop_words(
         &self,
         results_as_tokens: &[HashSet<String>],
         include_city: bool,
     ) -> (HashSet<String>, HashSet<String>, TokenToCoincidence) {
-        let city_coincidence_default = 1f32 / (results_as_tokens.len() + 2) as f32;
+        let results_count = self.extract_results_count(results_as_tokens);
+        let city_coincidence_default = 1f32 / (results_count + 2) as f32;
 
         let result_token_and_line_count_list =
             self.extract_result_token_and_line_count_list(results_as_tokens);
@@ -533,8 +543,8 @@ impl Config {
         for (token, count) in result_token_and_line_count_list.iter() {
             // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
             if include_city {
-                let result_count = results_as_tokens.len();
-                let city_coincidence = (*count + 1) as f32 / (result_count + 2) as f32;
+                let results_count = self.extract_results_count(results_as_tokens);
+                let city_coincidence = (*count + 1) as f32 / (results_count + 2) as f32;
                 city_to_coincidence
                     .token_to_prob
                     .insert(token.to_string(), city_coincidence);
