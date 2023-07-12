@@ -1,6 +1,6 @@
 use std::io;
 
-use race_results::{find_matches, read_lines};
+use race_results::{read_lines, Config};
 
 fn main() -> io::Result<()> {
     // let sample_top = Path::new(r"C:\Users\carlk\OneDrive\Shares\RaceResults");
@@ -15,13 +15,8 @@ fn main() -> io::Result<()> {
     // cmk this doesn't look good
     let result_lines2 = read_lines(results_file_name)?.map(|line| line.unwrap());
     // cmk there should be a tokenize struct, etc.
-    let line_list = find_matches(
-        member_lines,
-        result_lines,
-        result_lines2,
-        include_city,
-        0.01,
-    );
+    let line_list =
+        Config::default().find_matches(member_lines, result_lines, result_lines2, include_city);
 
     let line_list = line_list.unwrap();
     for line in line_list.iter() {

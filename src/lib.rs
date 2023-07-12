@@ -181,398 +181,210 @@ fn extract_name_to_nicknames_set() -> HashMap<String, HashSet<String>> {
     name_to_nickname_set
 }
 
-#[anyinput]
-fn tokenize_race_results(result_lines: AnyIter<AnyString>, re: &Regex) -> Vec<HashSet<String>> {
-    result_lines
-        .map(|result_line| {
-            let result_line = result_line.as_ref().to_ascii_uppercase();
-            let token_set: HashSet<String> = re
-                .split(&result_line)
-                .map(|s| s.to_owned())
-                .filter(|token| !token.is_empty() && !token.chars().any(|c| c.is_ascii_digit()))
-                .collect();
-            // println!("token_set={:?}", token_set);
-            token_set
-        })
-        .collect()
-}
-
-// cmk "extract_" is a bad name
-fn extract_result_token_and_line_count_list(
-    results_as_tokens: &[HashSet<String>],
-    // cmk is is isize so help sorting, but what if we get too many?
-) -> HashMap<String, usize> {
-    let result_token_to_line_count =
-        results_as_tokens
-            .iter()
-            .flatten()
-            .fold(HashMap::new(), |mut acc, token| {
-                *acc.entry(token.clone()).or_insert(0) += 1;
-                acc
-            });
-    // let mut result_token_to_line_count_vec: Vec<(String, isize)> =
-    //     result_token_to_line_count.into_iter().collect();
-    // result_token_to_line_count_vec.sort_by_key(|(_token, count)| -*count);
-    // result_token_to_line_count_vec
-    result_token_to_line_count
-}
-
-#[allow(clippy::too_many_arguments)]
-#[anyinput]
-fn find_matching_people_for_each_result_line(
-    result_lines2: AnyIter<AnyString>,
-    results_as_tokens: &[HashSet<String>],
-    token_to_person_list: &HashMap<String, Vec<Rc<Person>>>,
-    name_to_coincidence: &TokenToCoincidence,
-    city_to_coincidence: &TokenToCoincidence,
-    include_city: bool,
-    threshold_probability: f32,
+pub struct Config {
     prob_member_in_race: f32,
-) -> Vec<LinePeople> {
-    let result_count = results_as_tokens.len();
-    let prior_points = log_odds(prob_member_in_race / result_count as f32);
+    total_right: f32,
+    total_nickname: f32,
+    name_to_coincidence: TokenToCoincidence,
+    stop_words_points: f32,
+    re: Regex,
+    threshold_probability: f32,
+}
 
-    let mut line_people_list: Vec<LinePeople> = Vec::new();
-    for (result_line, result_tokens) in result_lines2.zip(results_as_tokens)
-    // .take(100)
-    {
-        // let cmk = result_line.as_ref().clone();
-        // if cmk.contains("test") {
-        //     println!("result_line");
-        // }
-        let person_set = result_tokens
-            .iter()
-            .filter_map(|token| token_to_person_list.get(token))
-            .flatten()
-            .collect::<HashSet<_>>();
-
-        let mut line_people: Option<LinePeople> = None;
-        for person in person_set.iter() {
-            let person = *person;
-
-            let name_points_sum = person.name_points(result_tokens, name_to_coincidence);
-            let city_points_sum = if include_city {
-                person.city_points(result_tokens, city_to_coincidence)
-            } else {
-                0.0
-            };
-
-            let post_points = prior_points + name_points_sum + city_points_sum;
-
-            let post_prob = prob(post_points);
-
-            if post_prob > threshold_probability {
-                // println!(
-                //     "cmk {person:?} {post_points:.2} {post_prob:.2} {}",
-                //     result_line.as_ref()
-                // );
-                if let Some(line_people) = &mut line_people {
-                    line_people.max_prob = line_people.max_prob.max(post_prob);
-                    line_people
-                        .person_prob_list
-                        .push((person.clone(), post_prob));
-                } else {
-                    line_people = Some(LinePeople {
-                        line: result_line.as_ref().to_string(),
-                        max_prob: post_prob,
-                        person_prob_list: vec![(person.clone(), post_prob)],
-                    });
-                }
-            }
-        }
-        if let Some(line_people) = line_people {
-            line_people_list.push(line_people);
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            prob_member_in_race: 0.01,
+            total_right: 0.6,
+            total_nickname: 0.1,
+            name_to_coincidence: TokenToCoincidence::default_names(),
+            stop_words_points: 3.0,
+            re: Regex::new(r"[\-/ &\t]+").unwrap(),
+            threshold_probability: 0.01,
         }
     }
-    line_people_list.sort_by(|a, b| b.max_prob.partial_cmp(&a.max_prob).unwrap());
-    line_people_list
 }
 
-// cmk this should be a method on Dist (?)
-// cmk should tokens be there own type?
-fn extract_dist_list(
-    token: &str,
-    total_right: f32,
-    token_to_nickname_set: &HashMap<String, HashSet<String>>,
-    total_nickname: f32,
-    re: &Regex,
-) -> Result<Vec<Dist>, anyhow::Error> {
-    token
-        .split(|c: char| c.is_whitespace() || c == '-')
-        .map(|city| Dist::split_token(city, total_right, re, token_to_nickname_set, total_nickname))
-        .collect::<Result<Vec<_>, _>>()
-}
+impl Config {
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-#[allow(clippy::too_many_arguments)]
-#[anyinput]
-fn index_person_list(
-    member_lines: AnyIter<AnyString>,
-    total_right: f32,
-    total_nickname: f32,
-    re: &Regex,
-    name_stop_words: HashSet<String>,
-    city_stop_words: HashSet<String>,
-    include_city: bool,
-) -> Result<HashMap<String, Vec<Rc<Person>>>, anyhow::Error> {
-    let city_to_nickname_set = HashMap::<String, HashSet<String>>::new();
-    let name_to_nickname_set = extract_name_to_nicknames_set();
+    #[anyinput]
+    pub fn find_matches(
+        &self,
+        member_lines: AnyIter<AnyString>,
+        result_lines: AnyIter<AnyString>,
+        result_lines2: AnyIter<AnyString>,
+        include_city: bool,
+    ) -> Result<Vec<String>, anyhow::Error> {
+        let results_as_tokens = self.tokenize_race_results(result_lines);
 
-    let mut token_to_person_list = HashMap::new();
-    for (id, line) in member_lines.enumerate() {
-        let line = line.as_ref();
-        // cmk treat first and last more uniformly
-        // cmk show a nice error if the line is not tab-separated, three columns
-        // cmk println!("line={:?}", line);
-        let (first_name, last_name, city) =
-            if let Some((first, last, city)) = line.split('\t').collect_tuple() {
-                (first, last, city)
-            } else {
-                return Err(anyhow!(
-                    "Line should contain three tab-separated items, not '{line}'"
-                ));
-            };
+        // from the tokens in the race results, look for one's that are too common to be useful
+        let (name_stop_words, city_stop_words, city_to_coincidence) =
+            self.find_stop_words(&results_as_tokens, include_city);
 
-        let first_name = first_name.to_uppercase();
-        let last_name = last_name.to_uppercase();
-        let city = city.to_uppercase();
+        let token_to_person_list =
+            self.index_person_list(member_lines, name_stop_words, city_stop_words, include_city)?;
 
-        let first_dist_list = extract_dist_list(
-            &first_name,
-            total_right,
-            &name_to_nickname_set,
-            total_nickname,
-            re,
-        )?;
+        let line_people_list = self.find_matching_people_for_each_result_line(
+            result_lines2,
+            &results_as_tokens,
+            &token_to_person_list,
+            &city_to_coincidence,
+            include_city,
+        );
 
-        let last_dist_list = extract_dist_list(
-            &last_name,
-            total_right,
-            &name_to_nickname_set,
-            total_nickname,
-            re,
-        )?;
+        let final_output = self.format_final_output(line_people_list);
 
-        let mut name_dist_list = first_dist_list;
-        name_dist_list.extend(last_dist_list);
+        Ok(final_output)
+    }
 
-        // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
-        let city_dist_list = extract_dist_list(
-            &city,
-            total_right,
-            &city_to_nickname_set,
-            total_nickname,
-            re,
-        )?;
+    #[anyinput]
+    fn tokenize_race_results(&self, result_lines: AnyIter<AnyString>) -> Vec<HashSet<String>> {
+        result_lines
+            .map(|result_line| {
+                let result_line = result_line.as_ref().to_ascii_uppercase();
+                let token_set: HashSet<String> = self
+                    .re
+                    .split(&result_line)
+                    .map(|s| s.to_owned())
+                    .filter(|token| !token.is_empty() && !token.chars().any(|c| c.is_ascii_digit()))
+                    .collect();
+                // println!("token_set={:?}", token_set);
+                token_set
+            })
+            .collect()
+    }
 
-        let person = Rc::new(Person {
-            name_dist_list,
-            city_dist_list,
-            id,
-        });
-        // cmk is there a way to avoid cloning keys?
-        // cmk change for loop to use functional
-        for name_dist in person.name_dist_list.iter() {
-            for name in name_dist.tokens().iter() {
-                if name_stop_words.contains(name) {
-                    continue;
-                }
-                token_to_person_list
-                    .entry(first_name.clone())
-                    .or_insert(Vec::new())
-                    .push(person.clone());
-            }
-        }
+    // cmk "extract_" is a bad name
+    fn extract_result_token_and_line_count_list(
+        &self,
+        results_as_tokens: &[HashSet<String>],
+        // cmk is is isize so help sorting, but what if we get too many?
+    ) -> HashMap<String, usize> {
+        let result_token_to_line_count =
+            results_as_tokens
+                .iter()
+                .flatten()
+                .fold(HashMap::new(), |mut acc, token| {
+                    *acc.entry(token.clone()).or_insert(0) += 1;
+                    acc
+                });
+        // let mut result_token_to_line_count_vec: Vec<(String, isize)> =
+        //     result_token_to_line_count.into_iter().collect();
+        // result_token_to_line_count_vec.sort_by_key(|(_token, count)| -*count);
+        // result_token_to_line_count_vec
+        result_token_to_line_count
+    }
 
-        if include_city {
-            for city_dist in person.city_dist_list.iter() {
-                for city in city_dist.tokens().iter() {
-                    if !city_stop_words.contains(city) {
-                        token_to_person_list
-                            .entry(city.clone())
-                            .or_insert(Vec::new())
-                            .push(person.clone());
+    #[allow(clippy::too_many_arguments)]
+    #[anyinput]
+    fn find_matching_people_for_each_result_line(
+        &self,
+        result_lines2: AnyIter<AnyString>,
+        results_as_tokens: &[HashSet<String>],
+        token_to_person_list: &HashMap<String, Vec<Rc<Person>>>,
+        city_to_coincidence: &TokenToCoincidence,
+        include_city: bool,
+    ) -> Vec<LinePeople> {
+        let result_count = results_as_tokens.len();
+        let prior_points = log_odds(self.prob_member_in_race / result_count as f32);
+
+        let mut line_people_list: Vec<LinePeople> = Vec::new();
+        for (result_line, result_tokens) in result_lines2.zip(results_as_tokens)
+        // .take(100)
+        {
+            // let cmk = result_line.as_ref().clone();
+            // if cmk.contains("test") {
+            //     println!("result_line");
+            // }
+            let person_set = result_tokens
+                .iter()
+                .filter_map(|token| token_to_person_list.get(token))
+                .flatten()
+                .collect::<HashSet<_>>();
+
+            let mut line_people: Option<LinePeople> = None;
+            for person in person_set.iter() {
+                let person = *person;
+
+                let name_points_sum = person.name_points(result_tokens, &self.name_to_coincidence);
+                let city_points_sum = if include_city {
+                    person.city_points(result_tokens, city_to_coincidence)
+                } else {
+                    0.0
+                };
+
+                let post_points = prior_points + name_points_sum + city_points_sum;
+
+                let post_prob = prob(post_points);
+
+                if post_prob > self.threshold_probability {
+                    // println!(
+                    //     "cmk {person:?} {post_points:.2} {post_prob:.2} {}",
+                    //     result_line.as_ref()
+                    // );
+                    if let Some(line_people) = &mut line_people {
+                        line_people.max_prob = line_people.max_prob.max(post_prob);
+                        line_people
+                            .person_prob_list
+                            .push((person.clone(), post_prob));
+                    } else {
+                        line_people = Some(LinePeople {
+                            line: result_line.as_ref().to_string(),
+                            max_prob: post_prob,
+                            person_prob_list: vec![(person.clone(), post_prob)],
+                        });
                     }
                 }
             }
-        }
-    }
-    Ok(token_to_person_list)
-}
-
-fn find_stop_words(
-    include_city: bool,
-    name_to_coincidence: &TokenToCoincidence,
-    stop_words_points: f32,
-    results_as_tokens: &[HashSet<String>],
-    total_right: f32,
-) -> (HashSet<String>, HashSet<String>, TokenToCoincidence) {
-    let city_coincidence_default = 1f32 / (results_as_tokens.len() + 2) as f32;
-
-    let result_token_and_line_count_list =
-        extract_result_token_and_line_count_list(results_as_tokens);
-
-    let mut name_stop_words = HashSet::<String>::new();
-    let mut city_stop_words = HashSet::<String>::new();
-    let mut city_to_coincidence = TokenToCoincidence {
-        token_to_prob: HashMap::new(),
-        default: city_coincidence_default,
-    };
-
-    for (token, count) in result_token_and_line_count_list.iter() {
-        // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
-        if include_city {
-            let result_count = results_as_tokens.len();
-            let city_coincidence = (*count + 1) as f32 / (result_count + 2) as f32;
-            city_to_coincidence
-                .token_to_prob
-                .insert(token.to_string(), city_coincidence);
-            let city_points_contains = delta_one(true, city_coincidence, total_right);
-            if city_points_contains < stop_words_points {
-                city_stop_words.insert(token.to_string());
+            if let Some(line_people) = line_people {
+                line_people_list.push(line_people);
             }
         }
-        let name_points_contains = delta_one_name(true, token, total_right, name_to_coincidence);
-        if name_points_contains < stop_words_points {
-            name_stop_words.insert(token.to_string());
-        }
-    }
-    (name_stop_words, city_stop_words, city_to_coincidence)
-}
-
-fn format_final_output(line_people_list: Vec<LinePeople>) -> Vec<String> {
-    let mut line_list = Vec::new();
-    for line_people in line_people_list.iter() {
-        let line = format!("{}", line_people.line);
-        line_list.push(line);
-        let mut person_prob_list = line_people.person_prob_list.clone();
-        // sort by prob
-        person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        for (person, prob) in person_prob_list.iter() {
-            let line = format!(
-                "   {:.2} {:?} {:?}",
-                // cmk if this is useful, make it a method
-                prob,
-                person
-                    .name_dist_list
-                    .iter()
-                    .map(|name_dist| name_dist.tokens())
-                    .collect_vec(),
-                // cmk if this is useful, make it a method
-                person
-                    .city_dist_list
-                    .iter()
-                    .map(|city_dist| city_dist.tokens())
-                    .collect_vec(),
-            );
-            line_list.push(line);
-        }
-    }
-    line_list
-}
-
-#[anyinput]
-pub fn find_matches(
-    member_lines: AnyIter<AnyString>,
-    result_lines: AnyIter<AnyString>,
-    result_lines2: AnyIter<AnyString>,
-    include_city: bool,
-    threshold_probability: f32,
-) -> Result<Vec<String>, anyhow::Error> {
-    let prob_member_in_race = 0.01;
-    let total_right = 0.6f32;
-    let total_nickname = 0.1f32;
-    let name_to_coincidence = TokenToCoincidence::default_names();
-    let stop_words_points = 3.0f32;
-    // let threshold_probability = 0.01f32;
-    let re = Regex::new(r"[\-/ &\t]+").unwrap();
-
-    let results_as_tokens = tokenize_race_results(result_lines, &re);
-
-    // from the tokens in the race results, look for one's that are too common to be useful
-    let (name_stop_words, city_stop_words, city_to_coincidence) = find_stop_words(
-        include_city,
-        &name_to_coincidence,
-        stop_words_points,
-        &results_as_tokens,
-        total_right,
-    );
-
-    let token_to_person_list = index_person_list(
-        member_lines,
-        total_right,
-        total_nickname,
-        &re,
-        name_stop_words,
-        city_stop_words,
-        include_city,
-    )?;
-
-    let line_people_list = find_matching_people_for_each_result_line(
-        result_lines2,
-        &results_as_tokens,
-        &token_to_person_list,
-        &name_to_coincidence,
-        &city_to_coincidence,
-        include_city,
-        threshold_probability,
-        prob_member_in_race,
-    );
-
-    let final_output = format_final_output(line_people_list);
-
-    Ok(final_output)
-}
-
-// cmk should O'Neil tokenize to ONEIL?
-// cmk be sure there is a way to run without matching on city
-// cmk what about people with two-part first names?
-
-#[derive(Debug)]
-struct Dist {
-    token_and_prob: Vec<(String, f32)>,
-}
-
-impl Dist {
-    // cmk return an iterator of &str
-    fn tokens(&self) -> Vec<String> {
-        self.token_and_prob
-            .iter()
-            .map(|(token, _prob)| token.clone())
-            .collect_vec()
+        line_people_list.sort_by(|a, b| b.max_prob.partial_cmp(&a.max_prob).unwrap());
+        line_people_list
     }
 
-    // cmk return an iterator of f32
-    fn probs(&self) -> Vec<f32> {
-        self.token_and_prob
-            .iter()
-            .map(|(_token, prob)| *prob)
-            .collect_vec()
-    }
-
-    // cmk shouldn't have to pass in the re
-    fn split_token(
-        name: &str,
-        total_right: f32,
-        re: &Regex,
+    // cmk this should be a method on Dist (?)
+    // cmk should tokens be there own type?
+    fn extract_dist_list(
+        &self,
+        token: &str,
         token_to_nickname_set: &HashMap<String, HashSet<String>>,
-        total_nickname: f32,
-    ) -> Result<Self, anyhow::Error> {
-        // cmk0
+    ) -> Result<Vec<Dist>, anyhow::Error> {
+        token
+            .split(|c: char| c.is_whitespace() || c == '-')
+            .map(|city| self.split_token(city, token_to_nickname_set))
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    fn split_token(
+        &self,
+        name: &str,
+        token_to_nickname_set: &HashMap<String, HashSet<String>>,
+    ) -> Result<Dist, anyhow::Error> {
+        // cmk move these
         assert!(
-            total_nickname <= total_right / 2.0,
+            self.total_nickname <= self.total_right / 2.0,
             "Expect total nickname to be <= than half total_right"
         );
         // cmk0
         assert!(
-            (0.0..=1.0).contains(&total_right),
+            (0.0..=1.0).contains(&self.total_right),
             "Expect total_right to be between 0 and 1"
         );
         // cmk0
         assert!(
-            (0.0..=1.0).contains(&total_nickname),
+            (0.0..=1.0).contains(&self.total_nickname),
             "Expect total_nickname to be between 0 and 1"
         );
-        let main_set = re.split(name).map(|s| s.to_owned()).collect::<HashSet<_>>();
+        let main_set = self
+            .re
+            .split(name)
+            .map(|s| s.to_owned())
+            .collect::<HashSet<_>>();
         // cmk test that if a nickname is in the main set, it's not in the nickname set
         let nickname_set: HashSet<_> = main_set
             .iter()
@@ -585,13 +397,13 @@ impl Dist {
         let mut each_nickname: f32;
         // cmk test each path
         if nickname_set.is_empty() {
-            each_main = total_right / main_set.len() as f32;
+            each_main = self.total_right / main_set.len() as f32;
             each_nickname = 0.0;
         } else {
-            each_main = (total_right - total_nickname) / main_set.len() as f32;
-            each_nickname = total_nickname / nickname_set.len() as f32;
+            each_main = (self.total_right - self.total_nickname) / main_set.len() as f32;
+            each_nickname = self.total_nickname / nickname_set.len() as f32;
             if each_main < each_nickname {
-                each_main = total_right / (main_set.len() + nickname_set.len()) as f32;
+                each_main = self.total_right / (main_set.len() + nickname_set.len()) as f32;
                 each_nickname = each_main;
             }
         }
@@ -623,6 +435,179 @@ impl Dist {
             }
         }
         Ok(dist)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[anyinput]
+    fn index_person_list(
+        &self,
+        member_lines: AnyIter<AnyString>,
+        name_stop_words: HashSet<String>,
+        city_stop_words: HashSet<String>,
+        include_city: bool,
+    ) -> Result<HashMap<String, Vec<Rc<Person>>>, anyhow::Error> {
+        let city_to_nickname_set = HashMap::<String, HashSet<String>>::new();
+        let name_to_nickname_set = extract_name_to_nicknames_set();
+
+        let mut token_to_person_list = HashMap::new();
+        for (id, line) in member_lines.enumerate() {
+            let line = line.as_ref();
+            // cmk treat first and last more uniformly
+            // cmk show a nice error if the line is not tab-separated, three columns
+            // cmk println!("line={:?}", line);
+            let (first_name, last_name, city) =
+                if let Some((first, last, city)) = line.split('\t').collect_tuple() {
+                    (first, last, city)
+                } else {
+                    return Err(anyhow!(
+                        "Line should contain three tab-separated items, not '{line}'"
+                    ));
+                };
+
+            let first_name = first_name.to_uppercase();
+            let last_name = last_name.to_uppercase();
+            let city = city.to_uppercase();
+
+            let first_dist_list = self.extract_dist_list(&first_name, &name_to_nickname_set)?;
+
+            let last_dist_list = self.extract_dist_list(&last_name, &name_to_nickname_set)?;
+
+            let mut name_dist_list = first_dist_list;
+            name_dist_list.extend(last_dist_list);
+
+            // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
+            let city_dist_list = self.extract_dist_list(&city, &city_to_nickname_set)?;
+
+            let person = Rc::new(Person {
+                name_dist_list,
+                city_dist_list,
+                id,
+            });
+            // cmk is there a way to avoid cloning keys?
+            // cmk change for loop to use functional
+            for name_dist in person.name_dist_list.iter() {
+                for name in name_dist.tokens().iter() {
+                    if name_stop_words.contains(name) {
+                        continue;
+                    }
+                    token_to_person_list
+                        .entry(first_name.clone())
+                        .or_insert(Vec::new())
+                        .push(person.clone());
+                }
+            }
+
+            if include_city {
+                for city_dist in person.city_dist_list.iter() {
+                    for city in city_dist.tokens().iter() {
+                        if !city_stop_words.contains(city) {
+                            token_to_person_list
+                                .entry(city.clone())
+                                .or_insert(Vec::new())
+                                .push(person.clone());
+                        }
+                    }
+                }
+            }
+        }
+        Ok(token_to_person_list)
+    }
+
+    fn find_stop_words(
+        &self,
+        results_as_tokens: &[HashSet<String>],
+        include_city: bool,
+    ) -> (HashSet<String>, HashSet<String>, TokenToCoincidence) {
+        let city_coincidence_default = 1f32 / (results_as_tokens.len() + 2) as f32;
+
+        let result_token_and_line_count_list =
+            self.extract_result_token_and_line_count_list(results_as_tokens);
+
+        let mut name_stop_words = HashSet::<String>::new();
+        let mut city_stop_words = HashSet::<String>::new();
+        let mut city_to_coincidence = TokenToCoincidence {
+            token_to_prob: HashMap::new(),
+            default: city_coincidence_default,
+        };
+
+        for (token, count) in result_token_and_line_count_list.iter() {
+            // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
+            if include_city {
+                let result_count = results_as_tokens.len();
+                let city_coincidence = (*count + 1) as f32 / (result_count + 2) as f32;
+                city_to_coincidence
+                    .token_to_prob
+                    .insert(token.to_string(), city_coincidence);
+                let city_points_contains = delta_one(true, city_coincidence, self.total_right);
+                if city_points_contains < self.stop_words_points {
+                    city_stop_words.insert(token.to_string());
+                }
+            }
+            let name_points_contains =
+                delta_one_name(true, token, self.total_right, &self.name_to_coincidence);
+            if name_points_contains < self.stop_words_points {
+                name_stop_words.insert(token.to_string());
+            }
+        }
+        (name_stop_words, city_stop_words, city_to_coincidence)
+    }
+
+    fn format_final_output(&self, line_people_list: Vec<LinePeople>) -> Vec<String> {
+        let mut line_list = Vec::new();
+        for line_people in line_people_list.iter() {
+            let line = format!("{}", line_people.line);
+            line_list.push(line);
+            let mut person_prob_list = line_people.person_prob_list.clone();
+            // sort by prob
+            person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            for (person, prob) in person_prob_list.iter() {
+                let line = format!(
+                    "   {:.2} {:?} {:?}",
+                    // cmk if this is useful, make it a method
+                    prob,
+                    person
+                        .name_dist_list
+                        .iter()
+                        .map(|name_dist| name_dist.tokens())
+                        .collect_vec(),
+                    // cmk if this is useful, make it a method
+                    person
+                        .city_dist_list
+                        .iter()
+                        .map(|city_dist| city_dist.tokens())
+                        .collect_vec(),
+                );
+                line_list.push(line);
+            }
+        }
+        line_list
+    }
+}
+
+// cmk should O'Neil tokenize to ONEIL?
+// cmk be sure there is a way to run without matching on city
+// cmk what about people with two-part first names?
+
+#[derive(Debug)]
+struct Dist {
+    token_and_prob: Vec<(String, f32)>,
+}
+
+impl Dist {
+    // cmk return an iterator of &str
+    fn tokens(&self) -> Vec<String> {
+        self.token_and_prob
+            .iter()
+            .map(|(token, _prob)| token.clone())
+            .collect_vec()
+    }
+
+    // cmk return an iterator of f32
+    fn probs(&self) -> Vec<f32> {
+        self.token_and_prob
+            .iter()
+            .map(|(_token, prob)| *prob)
+            .collect_vec()
     }
 
     #[allow(clippy::let_and_return)]
