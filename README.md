@@ -2,7 +2,7 @@
 
 An open-source project to create a tool to find your friends, club members, and teammates in race results.
 
-You can run it live from [this GitHub page](https://carlkcarlk.github.io/race-results/matcher/).
+You can run it live from [this GitHub-hosted page](https://carlkcarlk.github.io/race-results/matcher/).
 
 ## Privacy
 

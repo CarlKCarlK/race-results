@@ -360,26 +360,25 @@ fn multi_name_cities() {
 
 #[test]
 fn multi_part_names() {
-    // cmk
-    // let member_lines = "Rob Roy\tSmith\tSeattle\n".lines(); //Jaime\tHerrera-Beutler\tKirkland\nSheila Bob\tJackson Lee\tBellevue\n
-    // let result_lines = "2120	Rob Roy Smith	Seattle	Male	Male 45-49	3:52:38\n".lines();
-    // let include_city = true;
-    // let matches = Config {
-    //     // threshold_probability: 0.0,
-    //     override_results_count: Some(1081),
-    //     ..Config::default()
-    // }
-    // .find_matches(
-    //     member_lines,
-    //     result_lines.clone(),
-    //     result_lines.clone(),
-    //     include_city,
-    // )
-    // .unwrap();
-    // for line in matches.iter() {
-    //     println!("{line}");
-    // }
-    // assert_eq!(matches.len(), 2);
+    let member_lines = "Rob Roy\tSmith\tSeattle\n".lines(); //Jaime\tHerrera-Beutler\tKirkland\nSheila Bob\tJackson Lee\tBellevue\n
+    let result_lines = "2120	Rob Roy Smith	Seattle	Male	Male 45-49	3:52:38\n".lines();
+    let include_city = true;
+    let matches = Config {
+        // threshold_probability: 0.0,
+        override_results_count: Some(1081),
+        ..Config::default()
+    }
+    .find_matches(
+        member_lines,
+        result_lines.clone(),
+        result_lines.clone(),
+        include_city,
+    )
+    .unwrap();
+    for line in matches.iter() {
+        println!("{line}");
+    }
+    assert_eq!(matches.len(), 2);
 
     let member_lines = "Rob Roy\tSmith\tSeattle\n".lines(); //Jaime\tHerrera-Beutler\tKirkland\nSheila Bob\tJackson Lee\tBellevue\n
     let result_lines = SAMPLE_RESULTS_STR.lines();
@@ -401,3 +400,28 @@ fn multi_part_names() {
     }
     assert_eq!(matches.len(), 12);
 }
+
+// #[test]
+// fn weird_result_1() {
+//     let member_lines = "MAYANK\tThakoreX\tSHORELINE\n".lines(); //Jaime\tHerrera-Beutler\tKirkland\nSheila Bob\tJackson Lee\tBellevue\n
+//     let result_lines = "2172	Mayank Thakore	Shoreline	Male	Male 35-39	4:57:10\n".lines();
+//     let include_city = true;
+//     let matches = Config {
+//         threshold_probability: 0.0,
+//         override_results_count: Some(1081),
+//         ..Config::default()
+//     }
+//     .find_matches(
+//         member_lines,
+//         result_lines.clone(),
+//         result_lines.clone(),
+//         include_city,
+//     )
+//     .unwrap();
+//     for line in matches.iter() {
+//         println!("{line}");
+//     }
+//     assert_eq!(matches.len(), 2);
+// }
+// // cmk00 why doesn't this match well with the sample results?
+// // mAYANAK	ThakoreX	sHORELINE

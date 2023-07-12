@@ -375,12 +375,10 @@ impl Config {
             self.total_nickname <= self.total_right / 2.0,
             "Expect total nickname to be <= than half total_right"
         );
-        // cmk0
         assert!(
             (0.0..=1.0).contains(&self.total_right),
             "Expect total_right to be between 0 and 1"
         );
-        // cmk0
         assert!(
             (0.0..=1.0).contains(&self.total_nickname),
             "Expect total_nickname to be between 0 and 1"
@@ -460,14 +458,15 @@ impl Config {
             // cmk treat first and last more uniformly
             // cmk show a nice error if the line is not tab-separated, three columns
             // cmk println!("line={:?}", line);
-            let (first_name, last_name, city) =
-                if let Some((first, last, city)) = line.split('\t').collect_tuple() {
-                    (first, last, city)
-                } else {
-                    return Err(anyhow!(
-                        "Line should contain three tab-separated items, not '{line}'"
-                    ));
-                };
+            let (first_name, last_name, city) = if let Some((first, last, city)) =
+                line.split(|c| c == '\t' || c == ',').collect_tuple()
+            {
+                (first, last, city)
+            } else {
+                return Err(anyhow!(
+                    "Line should contain three tab-separated items, not '{line}'"
+                ));
+            };
 
             let first_name = first_name.to_uppercase();
             let last_name = last_name.to_uppercase();
@@ -660,6 +659,10 @@ impl Person {
                 .iter()
                 .map(|token| result_tokens.contains(token))
                 .collect();
+            // println!("cmk dist {dist:?}, dist.tokens {:?}, result tokens {result_tokens:?} contains_list {contains_list:?}", dist.tokens() );
+            // let token = dist.tokens()[0].clone();
+            // let contains1 = result_tokens.contains(&token);
+            // println!("cmk contains1 {contains1:?}");
             dist.delta(&contains_list, to_coincidence)
         })
     }

@@ -14,18 +14,37 @@
   </style>
 </head>
 
-<body data-server-no-reload>
-   <div style="display: flex; justify-content: space-between; align-items: center;">
+<body >
+
+  <style>
+    .small-indented {
+        font-size: 0.8em;    /* make it smaller */
+        text-indent: 20px;   /* indent the text */
+        margin-top: 5px;     /* little line spacing before it */
+        font-style: italic;  /* make it italic */
+        margin-bottom: 5px;
+    }
+
+    textarea {
+    width: 100%;     /* make it take up the full width */
+    resize: vertical;  /* allow only vertical resizing */
+}
+</style>
+  <!-- data-server-no-reload -->
+  <div style="display: flex; justify-content: space-between; align-items: center;">
     <h1>Race Results</h1>
-    <a href="../" style="font-size: small; font-style: italic;">Latest version</a>
-    <a href="https://github.com/CarlKCarlK/race-results" style="font-size: small; font-style: italic;">About</a>
-  </div>
-    <label for="members">Members, can load from </label>
+    <div>
+        <a href="../" style="font-size: small; font-style: italic;">Latest version</a><br>
+        <a href="https://github.com/CarlKCarlK/race-results" style="font-size: small; font-style: italic;">About</a>
+    </div>
+</div>  <label for="members">Members, paste or load from </label>
   <input type="file" id="membersFile" accept=".txt,.tsv" onchange="loadMembersFromFile()">
+  <p class="small-indented">First,Last,City separated by tab or comma</p>
   <textarea id="members" rows="4"></textarea>
-  <p></p>
-  <label for="results">Results, can load from</label>
+  <p> </p>
+  <label for="results">Results, paste or load from</label>
   <input type="file" id="resultsFile" accept=".txt,.tsv" onchange="loadResultsFromFile()">
+  <p class="small-indented">Plain text, one result per line</p>
   <textarea id="results" rows="8"></textarea>
   <button onclick="callWasmFunction(true)">Match with City</button>
   <button onclick="callWasmFunction(false)">Match w/o City</button>

@@ -43,3 +43,4 @@ pub fn sample_results() -> JsValue {
 // cmk on the web page, get the latest/about next to each other
 // cmk should there be an hour glass or something while the results are being computed?
 // cmk is there way (and should) for javascript to download the big file and pass it over.
+// cmk does it do the right thing if a name is missing?
