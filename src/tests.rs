@@ -284,6 +284,7 @@ fn sample_data() {
         result_lines.clone(),
         result_lines,
         include_city,
+        0.01,
     );
     let matches = matches.unwrap();
     for line in matches.iter() {
@@ -305,7 +306,13 @@ fn spot_check() {
     let result_lines2 = read_lines(r"C:\Users\carlk\Downloads\G_reformatted.txt")
         .unwrap()
         .map(|line| line.unwrap());
-    let matches = find_matches(member_lines, result_lines, result_lines2, include_city);
+    let matches = find_matches(
+        member_lines,
+        result_lines,
+        result_lines2,
+        include_city,
+        0.01,
+    );
     let matches = matches.unwrap();
     for line in matches.iter() {
         println!("{}", line);
@@ -322,6 +329,7 @@ fn bad_member_data() {
         result_lines.clone(),
         result_lines.clone(),
         include_city,
+        0.01,
     );
     assert_eq!(
         matches.map_err(|e| e.to_string()),
@@ -334,6 +342,7 @@ fn bad_member_data() {
         result_lines.clone(),
         result_lines,
         include_city,
+        0.01,
     );
     assert_eq!(
         matches.map_err(|e| e.to_string()),
@@ -351,9 +360,26 @@ fn multi_name_cities() {
         result_lines.clone(),
         result_lines.clone(),
         include_city,
+        0.01,
+    )
+    .unwrap();
+    assert!(matches.is_empty());
+}
+
+#[test]
+fn multi_part_names() {
+    let member_lines = "Rob Roy\tSmith\tSeattle\n".lines(); //Jaime\tHerrera-Beutler\tKirkland\nSheila Bob\tJackson Lee\tBellevue\n
+    let result_lines = SAMPLE_RESULTS_STR.lines();
+    let include_city = true;
+    let matches = find_matches(
+        member_lines,
+        result_lines.clone(),
+        result_lines.clone(),
+        include_city,
+        0.0,
     )
     .unwrap();
     for line in matches.iter() {
-        println!("{}", line);
+        println!("{line}");
     }
 }

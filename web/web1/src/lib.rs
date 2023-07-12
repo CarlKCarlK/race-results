@@ -11,6 +11,7 @@ pub fn member_match(members: &str, race_results: &str, include_city: bool) -> Js
         race_results.lines(),
         race_results.lines(),
         include_city,
+        0.01,
     );
     let s = match function_result {
         Ok(match_list) => match_list.join("\n"),

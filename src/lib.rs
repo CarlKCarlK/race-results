@@ -288,6 +288,21 @@ fn find_matching_people_for_each_result_line(
     line_people_list
 }
 
+// cmk this should be a method on Dist (?)
+// cmk should tokens be there own type?
+fn extract_dist_list(
+    token: &str,
+    total_right: f32,
+    token_to_nickname_set: &HashMap<String, HashSet<String>>,
+    total_nickname: f32,
+    re: &Regex,
+) -> Result<Vec<Dist>, anyhow::Error> {
+    token
+        .split(|c: char| c.is_whitespace() || c == '-')
+        .map(|city| Dist::split_token(city, total_right, re, token_to_nickname_set, total_nickname))
+        .collect::<Result<Vec<_>, _>>()
+}
+
 #[allow(clippy::too_many_arguments)]
 #[anyinput]
 fn index_person_list(
@@ -321,29 +336,33 @@ fn index_person_list(
         let last_name = last_name.to_uppercase();
         let city = city.to_uppercase();
 
-        let first_dist = Dist::split_token(
+        let first_dist_list = extract_dist_list(
             &first_name,
             total_right,
-            re,
             &name_to_nickname_set,
             total_nickname,
+            re,
         )?;
-        let last_dist = Dist::split_token(
+
+        let last_dist_list = extract_dist_list(
             &last_name,
             total_right,
-            re,
             &name_to_nickname_set,
             total_nickname,
+            re,
         )?;
-        let name_dist_list = vec![first_dist, last_dist];
+
+        let mut name_dist_list = first_dist_list;
+        name_dist_list.extend(last_dist_list);
 
         // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
-        let city_dist_list = city
-            .split_ascii_whitespace()
-            .map(|city| {
-                Dist::split_token(city, total_right, re, &city_to_nickname_set, total_nickname)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let city_dist_list = extract_dist_list(
+            &city,
+            total_right,
+            &city_to_nickname_set,
+            total_nickname,
+            re,
+        )?;
 
         let person = Rc::new(Person {
             name_dist_list,
@@ -457,13 +476,14 @@ pub fn find_matches(
     result_lines: AnyIter<AnyString>,
     result_lines2: AnyIter<AnyString>,
     include_city: bool,
+    threshold_probability: f32,
 ) -> Result<Vec<String>, anyhow::Error> {
     let prob_member_in_race = 0.01;
     let total_right = 0.6f32;
     let total_nickname = 0.1f32;
     let name_to_coincidence = TokenToCoincidence::default_names();
     let stop_words_points = 3.0f32;
-    let threshold_probability = 0.01f32;
+    // let threshold_probability = 0.01f32;
     let re = Regex::new(r"[\-/ &\t]+").unwrap();
 
     let results_as_tokens = tokenize_race_results(result_lines, &re);
@@ -719,3 +739,5 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 // cmk0 it seems to give too much weight to city matches with multi-part cities. E.g. esr2012 and sample results, forest park and des moines and mill creek
 // cmk we use name_to_coincidence twice, but we could use it once.
 // cmk will every ESR member be listed when looking at the NYC marathon because 'redmond', etc is rare in the results?
+// cmk there must be a way to handle the city/vs not automatically.
+// cmk accept commas too

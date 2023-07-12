@@ -15,7 +15,13 @@ fn main() -> io::Result<()> {
     // cmk this doesn't look good
     let result_lines2 = read_lines(results_file_name)?.map(|line| line.unwrap());
     // cmk there should be a tokenize struct, etc.
-    let line_list = find_matches(member_lines, result_lines, result_lines2, include_city);
+    let line_list = find_matches(
+        member_lines,
+        result_lines,
+        result_lines2,
+        include_city,
+        0.01,
+    );
 
     let line_list = line_list.unwrap();
     for line in line_list.iter() {
