@@ -7,19 +7,19 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 
-<body>
-  <!-- data-server-no-reload -->
+<body data-server-no-reload>
 
   <div style="display: flex; justify-content: space-between; align-items: center;">
     <h1>Race Results</h1>
     <div>
       <a href="../" style="font-size: small; font-style: italic;">Latest version</a><br>
       <a href="https://github.com/CarlKCarlK/race-results" style="font-size: small; font-style: italic;">About</a><br>
-      <a onclick="showForm()" class="settingsLink" style="font-size: small; font-style: italic;">Toggle Settings</a>  <!-- Settings link -->
+      <!-- <a onclick="toggleSettings()" class="settingsLink" style="font-size: small; font-style: italic;">Toggle Settings</a> -->
+  
     </div>
   </div>
 
-  <form id="valueForm">
+  <div id="valueForm">  <!-- Converted the form to a div -->
     <div>
       <label for="prob_member_in_race">prob_member_in_race:</label>
       <input type="number" id="prob_member_in_race" name="prob_member_in_race" value="0.01" step="0.01" min="0">
@@ -32,21 +32,23 @@
       <label for="total_nickname">total_nickname:</label>
       <input type="number" id="total_nickname" name="total_nickname" value="0.1" step="0.01" min="0">
     </div>
-    
-  </form>  
-  <label for="members">Members, paste or load from </label>
+  </div>
+
+  
+  <label for="members"><b>Members</b> - paste or load from </label>
   <input type="file" id="membersFile" accept=".txt,.tsv" onchange="loadMembersFromFile()">
   <p class="small-indented">First,Last,City separated by tab or comma</p>
   <textarea id="members" rows="4"></textarea>
   <p> </p>
-  <label for="results">Results, paste or load from</label>
+
+  <label for="results"><b>Results</b> - paste or load from</label>
   <input type="file" id="resultsFile" accept=".txt,.tsv" onchange="loadResultsFromFile()">
   <p class="small-indented">Plain text, one result per line but extra lines are OK.</p>
   <textarea id="results" rows="8"></textarea>
   <button onclick="callWasmFunction(true)">Match with City</button>
   <button onclick="callWasmFunction(false)">Match w/o City</button>
   <p></p>
-  <label for="matches">Matches</label>
+  <label for="matches"><b>Matches</b></label>
   <textarea id="matches" readonly rows="20"></textarea>
 
   <script src="main.js" type="module"></script>

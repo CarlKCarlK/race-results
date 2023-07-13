@@ -39,16 +39,11 @@ form div {
     margin: 20px;
     padding: 20px;
     border: 1px solid black;
-    /* Add a border around the form */
     display: none;
 }
 
 #valueForm div {
     margin-bottom: 10px;
-}
-
-button {
-    margin: 20px;
 }
 
 .settingsLink {

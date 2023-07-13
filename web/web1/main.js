@@ -45,7 +45,6 @@ function sleep(ms) {
 window.callWasmFunction = callWasmFunction;
 window.loadMembersFromFile = loadMembersFromFile;
 window.loadResultsFromFile = loadResultsFromFile;
-window.showForm = showForm;
 
 window.addEventListener('DOMContentLoaded', (event) => {
     init().then(() => {
@@ -54,29 +53,13 @@ window.addEventListener('DOMContentLoaded', (event) => {
     });
 });
 
-function showForm() {
-    document.getElementById('valueForm').style.display = 'block';
-    document.getElementById('changeButton').style.display = 'none';
+function toggleSettings() {
+    var settings = document.getElementById('valueForm');
+    if (settings.style.display === 'none') {
+        settings.style.display = 'block';
+    } else {
+        settings.style.display = 'none';
+    }
 }
 
-function hideForm() {  // Add a function to hide the form
-    document.getElementById('valueForm').style.display = 'none';
-    document.getElementById('changeButton').style.display = 'block';
-}
-
-document.getElementById('valueForm').addEventListener('submit', function (event) {
-    event.preventDefault();
-
-    let values = {
-        prob_member_in_race: parseFloat(document.getElementById('prob_member_in_race').value),
-        total_right: parseFloat(document.getElementById('total_right').value),
-        total_nickname: parseFloat(document.getElementById('total_nickname').value),
-    };
-
-    console.log(values);
-
-    hideForm();  // Hide the form after submitting
-});
-
-window.showForm = showForm;
-window.hideForm = hideForm;
+window.toggleSettings = toggleSettings;

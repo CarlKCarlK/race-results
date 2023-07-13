@@ -402,3 +402,26 @@ fn multi_part_names() {
     }
     assert_eq!(matches.len(), 12);
 }
+
+#[test]
+fn missing_names() {
+    let member_lines = "Forte,,Lakewood\n".lines();
+    let result_lines = SAMPLE_RESULTS_STR.lines();
+    let include_city = true;
+    let matches = Config {
+        // threshold_probability: 0.0,
+        override_results_count: Some(1081),
+        ..Config::default()
+    }
+    .find_matches(
+        member_lines,
+        result_lines.clone(),
+        result_lines.clone(),
+        include_city,
+    )
+    .unwrap();
+    for line in matches.iter() {
+        println!("{line}");
+    }
+    assert_eq!(matches.len(), 2);
+}

@@ -56,6 +56,7 @@ pub fn delta_many_names(
     delta_many(contains_list, &prob_coincidence_list, prob_right_list)
 }
 
+// zero length returns 0.0
 pub fn delta_many(
     contains_list: &[bool],
     prob_coincidence_list: &[f32],
@@ -79,8 +80,7 @@ pub fn delta_many(
         .map(|((contains, prob_coincidence), prob_right)| {
             delta_one(*contains, *prob_coincidence, *prob_right)
         })
-        .reduce(|a, b| a.max(b))
-        .unwrap_or_else(|| panic!("Expect length > 0"))
+        .fold(0.0, |a, b| a.max(b))
 }
 
 #[inline]
@@ -247,6 +247,7 @@ impl Config {
                     .re
                     .split(&result_line)
                     .map(|s| s.to_owned())
+                    // cmk00 regex related
                     .filter(|token| !token.is_empty() && !token.chars().any(|c| c.is_ascii_digit()))
                     .collect();
                 // println!("token_set={:?}", token_set);
@@ -380,6 +381,7 @@ impl Config {
         let main_set = self
             .re
             .split(name)
+            .filter(|token| !token.is_empty() && !token.chars().any(|c| c.is_ascii_digit()))
             .map(|s| s.to_owned())
             .collect::<HashSet<_>>();
         // cmk test that if a nickname is in the main set, it's not in the nickname set
@@ -448,6 +450,7 @@ impl Config {
         for (id, line) in member_lines.enumerate() {
             let line = line.as_ref();
             // cmk println!("line={:?}", line);
+            // cmk00 regex related
             let (first_name, last_name, city) = if let Some((first, last, city)) =
                 line.split(|c| c == '\t' || c == ',').collect_tuple()
             {
