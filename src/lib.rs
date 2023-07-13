@@ -586,7 +586,7 @@ impl Config {
     }
 }
 
-// cmk should O'Neil tokenize to ONEIL?
+// cmk0 should O'Neil tokenize to ONEIL?
 
 #[derive(Debug)]
 struct Dist {
@@ -725,6 +725,7 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 // cmk there must be a way to handle the city/vs not automatically.
 // cmk create better sample data
 // cmk hard to use from a phone (is there an easy way to access address list?)
+// cmk0 understand the regex and similar code. Should it be compiled?
 
 // cmkdoc best on laptop
 // cmkdoc many races let see all the results on one page, but some such as the NYC Marathon (with 47,000 runners) doesn't.

@@ -14,9 +14,27 @@
     <h1>Race Results</h1>
     <div>
       <a href="../" style="font-size: small; font-style: italic;">Latest version</a><br>
-      <a href="https://github.com/CarlKCarlK/race-results" style="font-size: small; font-style: italic;">About</a>
+      <a href="https://github.com/CarlKCarlK/race-results" style="font-size: small; font-style: italic;">About</a><br>
+      <a onclick="showForm()" class="settingsLink" style="font-size: small; font-style: italic;">Toggle Settings</a>  <!-- Settings link -->
     </div>
-  </div> <label for="members">Members, paste or load from </label>
+  </div>
+
+  <form id="valueForm">
+    <div>
+      <label for="prob_member_in_race">prob_member_in_race:</label>
+      <input type="number" id="prob_member_in_race" name="prob_member_in_race" value="0.01" step="0.01" min="0">
+    </div>
+    <div>
+      <label for="total_right">total_right:</label>
+      <input type="number" id="total_right" name="total_right" value="0.6" step="0.01" min="0">
+    </div>
+    <div>
+      <label for="total_nickname">total_nickname:</label>
+      <input type="number" id="total_nickname" name="total_nickname" value="0.1" step="0.01" min="0">
+    </div>
+    
+  </form>  
+  <label for="members">Members, paste or load from </label>
   <input type="file" id="membersFile" accept=".txt,.tsv" onchange="loadMembersFromFile()">
   <p class="small-indented">First,Last,City separated by tab or comma</p>
   <textarea id="members" rows="4"></textarea>
