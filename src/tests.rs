@@ -241,7 +241,6 @@ fn test2() {
         prior_points, prior_prob
     );
 
-    // cmk ignoring nicknames for now
     let first_name_points = delta_one_name(
         contains_first,
         &person.first_name,
@@ -326,7 +325,10 @@ fn bad_member_data() {
     );
     assert_eq!(
         matches.map_err(|e| e.to_string()),
-        Err(anyhow!("Line should contain three tab-separated items, not 'aa\tbb'").to_string())
+        Err(
+            anyhow!("Line should be First,Last,City separated by tab or comma, not 'aa\tbb'")
+                .to_string()
+        )
     );
 
     let member_lines = "a\tb\tc\naa\tbb*b\tcc\n".lines();
@@ -400,28 +402,3 @@ fn multi_part_names() {
     }
     assert_eq!(matches.len(), 12);
 }
-
-// #[test]
-// fn weird_result_1() {
-//     let member_lines = "MAYANK\tThakoreX\tSHORELINE\n".lines(); //Jaime\tHerrera-Beutler\tKirkland\nSheila Bob\tJackson Lee\tBellevue\n
-//     let result_lines = "2172	Mayank Thakore	Shoreline	Male	Male 35-39	4:57:10\n".lines();
-//     let include_city = true;
-//     let matches = Config {
-//         threshold_probability: 0.0,
-//         override_results_count: Some(1081),
-//         ..Config::default()
-//     }
-//     .find_matches(
-//         member_lines,
-//         result_lines.clone(),
-//         result_lines.clone(),
-//         include_city,
-//     )
-//     .unwrap();
-//     for line in matches.iter() {
-//         println!("{line}");
-//     }
-//     assert_eq!(matches.len(), 2);
-// }
-// // cmk00 why doesn't this match well with the sample results?
-// // mAYANAK	ThakoreX	sHORELINE

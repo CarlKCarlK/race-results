@@ -81,7 +81,6 @@
     function callWasmFunction(includeCity) {
       var members = document.getElementById('members').value;
       var results = document.getElementById('results').value;
-      // cmk add logic for the two buttons
       var wasmOutput = member_match(members, results, includeCity);
       document.getElementById('matches').value = wasmOutput;
     };

@@ -3,41 +3,20 @@
 
 <head>
   <title>Race Results</title>
-  <style>
-    textarea {
-      width: 100%;
-    }
-
-    button {
-      margin-top: 10px;
-    }
-  </style>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="styles.css">
 </head>
 
-<body >
-
-  <style>
-    .small-indented {
-        font-size: 0.8em;    /* make it smaller */
-        text-indent: 20px;   /* indent the text */
-        margin-top: 5px;     /* little line spacing before it */
-        font-style: italic;  /* make it italic */
-        margin-bottom: 5px;
-    }
-
-    textarea {
-    width: 100%;     /* make it take up the full width */
-    resize: vertical;  /* allow only vertical resizing */
-}
-</style>
+<body>
   <!-- data-server-no-reload -->
+
   <div style="display: flex; justify-content: space-between; align-items: center;">
     <h1>Race Results</h1>
     <div>
-        <a href="../" style="font-size: small; font-style: italic;">Latest version</a><br>
-        <a href="https://github.com/CarlKCarlK/race-results" style="font-size: small; font-style: italic;">About</a>
+      <a href="../" style="font-size: small; font-style: italic;">Latest version</a><br>
+      <a href="https://github.com/CarlKCarlK/race-results" style="font-size: small; font-style: italic;">About</a>
     </div>
-</div>  <label for="members">Members, paste or load from </label>
+  </div> <label for="members">Members, paste or load from </label>
   <input type="file" id="membersFile" accept=".txt,.tsv" onchange="loadMembersFromFile()">
   <p class="small-indented">First,Last,City separated by tab or comma</p>
   <textarea id="members" rows="4"></textarea>
@@ -51,48 +30,8 @@
   <p></p>
   <label for="matches">Matches</label>
   <textarea id="matches" readonly rows="20"></textarea>
-  <script type="module">
-    import init, { member_match, sample_members, sample_results } from './pkg/web1.js';
 
-    function loadMembersFromFile() {
-      var fileInput = document.getElementById('membersFile');
-      var file = fileInput.files[0];
-      if (file) {
-        var reader = new FileReader();
-        reader.onload = function(e) {
-          document.getElementById('members').value = e.target.result;
-        }
-        reader.readAsText(file);
-      }
-    }
-
-    function loadResultsFromFile() {
-      var fileInput = document.getElementById('resultsFile');
-      var file = fileInput.files[0];
-      if (file) {
-        var reader = new FileReader();
-        reader.onload = function(e) {
-          document.getElementById('results').value = e.target.result;
-        }
-        reader.readAsText(file);
-      }
-    }
-
-    function callWasmFunction(includeCity) {
-      var members = document.getElementById('members').value;
-      var results = document.getElementById('results').value;
-      // cmk add logic for the two buttons
-      var wasmOutput = member_match(members, results, includeCity);
-      document.getElementById('matches').value = wasmOutput;
-    };
-    window.callWasmFunction = callWasmFunction;
-    window.loadMembersFromFile = loadMembersFromFile;
-    window.loadResultsFromFile = loadResultsFromFile;
-    init().then(() => {
-    document.getElementById('members').value = sample_members();
-    document.getElementById('results').value = sample_results();
-  });
-  </script>
+  <script src="main.js" type="module"></script>
 </body>
 
 </html>

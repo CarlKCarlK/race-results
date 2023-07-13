@@ -1,0 +1,26 @@
+textarea {
+    width: 100%;
+}
+
+button {
+    margin-top: 10px;
+}
+
+.small-indented {
+    font-size: 0.8em;
+    /* make it smaller */
+    text-indent: 20px;
+    /* indent the text */
+    margin-top: 5px;
+    /* little line spacing before it */
+    font-style: italic;
+    /* make it italic */
+    margin-bottom: 5px;
+}
+
+textarea {
+    width: 100%;
+    /* make it take up the full width */
+    resize: vertical;
+    /* allow only vertical resizing */
+}

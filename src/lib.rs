@@ -6,7 +6,6 @@ mod tests;
 
 extern crate alloc;
 
-use anyhow::anyhow;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::{
@@ -37,7 +36,6 @@ pub fn delta_one_name(
     prob_right: f32,
     name_to_coincidence: &TokenToCoincidence,
 ) -> f32 {
-    // cmk what if not found?
     let prob_coincidence = name_to_coincidence.prob(name);
     delta_one(contains, prob_coincidence, prob_right)
 }
@@ -102,11 +100,9 @@ pub fn prob(logodds: f32) -> f32 {
     1.0 / (1.0 + E.powf(-logodds))
 }
 
-// cmk the fields should be private
-// cmk should we use 3rd party HashMap?
 pub struct TokenToCoincidence {
-    pub token_to_prob: HashMap<String, f32>,
-    pub default: f32,
+    token_to_prob: HashMap<String, f32>,
+    default: f32,
 }
 
 impl TokenToCoincidence {
@@ -263,7 +259,6 @@ impl Config {
     fn extract_result_token_and_line_count_list(
         &self,
         results_as_tokens: &[HashSet<String>],
-        // cmk is is isize so help sorting, but what if we get too many?
     ) -> HashMap<String, usize> {
         let result_token_to_line_count =
             results_as_tokens
@@ -352,7 +347,6 @@ impl Config {
         line_people_list
     }
 
-    // cmk this should be a method on Dist (?)
     // cmk should tokens be there own type?
     fn extract_dist_list(
         &self,
@@ -426,13 +420,11 @@ impl Config {
         };
 
         // cmk it doesn't make sense to pull out the strings when we had them earlier
-        // cmk should return an error rather than panic
         // cmk assert that every first_name_list, last_name, city contains only A-Z cmk update
         // cmk maybe use compiled regular expressions
         for item in dist.tokens().iter() {
             for c in item.chars() {
                 if !(c.is_ascii_alphabetic() || c == '.' || c == '\'') {
-                    // cmk0 replace my anyhow format in other places with this
                     anyhow::bail!("Item '{item}' should contain only A-Za-z, '.', and '\''");
                 }
             }
@@ -455,17 +447,15 @@ impl Config {
         let mut token_to_person_list = HashMap::new();
         for (id, line) in member_lines.enumerate() {
             let line = line.as_ref();
-            // cmk treat first and last more uniformly
-            // cmk show a nice error if the line is not tab-separated, three columns
             // cmk println!("line={:?}", line);
             let (first_name, last_name, city) = if let Some((first, last, city)) =
                 line.split(|c| c == '\t' || c == ',').collect_tuple()
             {
                 (first, last, city)
             } else {
-                return Err(anyhow!(
-                    "Line should contain three tab-separated items, not '{line}'"
-                ));
+                anyhow::bail!(
+                    "Line should be First,Last,City separated by tab or comma, not '{line}'"
+                );
             };
 
             let first_name = first_name.to_uppercase();
@@ -597,8 +587,6 @@ impl Config {
 }
 
 // cmk should O'Neil tokenize to ONEIL?
-// cmk be sure there is a way to run without matching on city
-// cmk what about people with two-part first names?
 
 #[derive(Debug)]
 struct Dist {
@@ -723,23 +711,23 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 }
 
 // cmk make the results paste in window small
-// cmk make the output window as large as needed.
 // cmk have a page that shows for format of the members file.
 // cmk load the page with samples (which means having a small member's input)
-// cmk should the members file have a header?
 // cmk use HTML to show the output nicer
 // cmk display every error possible in the input data.
-// cmk0 need to do multi-part last names and first names (space and -)
-// cmk0 need to remove ' from names (maybe ".")
-// cmk put sample data in project
+// cmk need to remove ' from names (maybe ".")
 // cmk create good sample data
 // cmk give users sliders for prob threshold? and priors? etc.
 // cmk see the work doc for a mock up of the output
 // cmk link: https://carlkcarlk.github.io/race-results/matcher/v0.1.0/index.html
-// cmk it's hard to insert tabs in an textarea
-// cmk0 it seems to give too much weight to city matches with multi-part cities. E.g. esr2012 and sample results, forest park and des moines and mill creek
 // cmk we use name_to_coincidence twice, but we could use it once.
 // cmk will every ESR member be listed when looking at the NYC marathon because 'redmond', etc is rare in the results?
 // cmk there must be a way to handle the city/vs not automatically.
-// cmk accept commas too
 // cmk create better sample data
+// cmk hard to use from a phone (is there an easy way to access address list?)
+
+// cmkdoc best on laptop
+// cmkdoc many races let see all the results on one page, but some such as the NYC Marathon (with 47,000 runners) doesn't.
+// cmkdoc the program assumes one result per line. Sometime when you cut and paste, a result will be split across many lines. I may
+// cmkdoc able to fix this in the future for popular websites with a little more code. Please send me examples of race results are split across many lines.
+// cmkdoc Mt./Mount/Mt Si but not NYC/New York City -- it splits on hyphens and spaces. Then slashes give alternatives for the single word.

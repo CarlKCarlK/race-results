@@ -4,7 +4,6 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub fn member_match(members: &str, race_results: &str, include_city: bool) -> JsValue {
-    // cmk using catch_unwind isn't nice
     // cmk the work 'result' is used in two different ways here
     let function_result = Config {
         // threshold_probability: 0.0,
@@ -35,12 +34,7 @@ pub fn sample_results() -> JsValue {
 }
 
 // cmk what if say "match with city" before uploading a file
-// cmk when match results are empty, show something
-// cmk should we support both *.txt and *.tsv (and *.csv?)
-// cmk0 catching panics isn't working
-// cmk move the match buttons to be close to Results
-// cmk why aren't names with spaces and hyphens causing errors?
-// cmk on the web page, get the latest/about next to each other
+// cmk0 when match results are empty, show something
 // cmk should there be an hour glass or something while the results are being computed?
 // cmk is there way (and should) for javascript to download the big file and pass it over.
-// cmk does it do the right thing if a name is missing?
+// cmk0 does it do the right thing if a name is blank?

@@ -238,7 +238,6 @@ fn test2() {
         prior_points, prior_prob
     );
 
-    // cmk ignoring nicknames for now
     let first_name_points = delta_one_name(
         contains_first,
         &person.first_name,
