@@ -35,18 +35,31 @@ pub struct Token(String);
 
 impl Token {
     pub fn new(s: &str) -> Self {
-        // cmk00 regex: check that legal
-        Self(s.to_owned())
+        Self(Token::to_canonical(s).unwrap())
     }
 
-    pub fn new_or_none(s: &str) -> Option<Self> {
-        if !s.is_empty() && !s.chars().any(|c| c.is_ascii_digit()) {
-            None
+    // A-Za-z . '
+    // internally we got to uppercase, remove . and ' and it can't be then empty.
+    pub fn to_canonical(s: &str) -> Result<String, anyhow::Error> {
+        let s = s.to_uppercase().replace(['.', '\''], "");
+        if s.is_empty() || s.chars().any(|c| !c.is_ascii_alphabetic()) {
+            Err(anyhow::anyhow!(
+                "String must be alphabetic with (ignored . and ') and then not empty, not \"{}\".",
+                s
+            ))
         } else {
-            Some(Self::new(s))
+            Ok(s)
         }
     }
 
+    pub fn new_or_error(s: &str) -> Result<Token, anyhow::Error> {
+        match Token::to_canonical(s) {
+            Ok(s) => Ok(Self(s)),
+            Err(e) => Err(e),
+        }
+    }
+
+    // cmk00 regex: Use Rc? use regular clone trait
     pub fn cmk_clone(&self) -> Self {
         Self(self.0.clone())
     }
@@ -159,48 +172,38 @@ fn extract_name_to_nicknames_set() -> HashMap<Token, HashSet<Token>> {
 
     // cmk00 regex: We should valdiate that the names don't have, e.g., * space, ', etc.
     for nickname_line in NICKNAMES_STR.lines() {
-        // expect one tab
-        let left;
-        let right;
-        // cmk make this nicer
-        if let Some((leftx, rightx)) = nickname_line.split('\t').collect_tuple() {
-            // cmk00 regex: nickname data: to upper case. (What's the "ascii" mean here?)
-            left = leftx.to_ascii_uppercase();
-            right = rightx.to_ascii_uppercase();
-        } else {
-            panic!("bad nickname line {:?}", nickname_line);
-        }
-
-        let left_and_right = [left.clone(), right.clone()];
+        let left_and_right: Vec<&str> = nickname_line.split('\t').collect_vec();
+        assert_eq!(
+            left_and_right.len(),
+            2,
+            "Expect two tab-separated parts to nickname line, not {:?}",
+            nickname_line
+        );
         let left_and_right = left_and_right
             .iter()
             .map(|side| {
-                // cmk00 regex: nickname data: this is the 2nd place we split on /
                 side.split('/')
-                    .map(|name| {
-                        // cmk00 regex: nickname data: We check that ascii or .
-                        // panic if not [A-Z.]
-                        name.chars().for_each(|c| {
-                            if !c.is_ascii_alphabetic() && c != '.' {
-                                panic!("bad char in {:?}", name);
-                            }
-                        });
-                        name
-                    })
-                    .collect_vec()
+                    .map(Token::new_or_error)
+                    .collect::<Result<Vec<_>, _>>()
             })
-            .collect_vec();
+            .collect::<Result<Vec<_>, _>>();
+
+        let left_and_right = left_and_right.unwrap_or_else(|e| {
+            panic!(
+                "Error parsing nickname line {:?} with error {:?}",
+                nickname_line, e
+            )
+        });
+
         for left in left_and_right[0].iter() {
-            let left = Token::new(left);
             for right in left_and_right[1].iter() {
-                let right = Token::new(right);
                 // cmk00 regex
                 name_to_nickname_set
                     .entry(left.cmk_clone())
                     .or_insert_with(HashSet::new)
                     .insert(right.cmk_clone());
                 name_to_nickname_set
-                    .entry(right)
+                    .entry(right.cmk_clone())
                     .or_insert_with(HashSet::new)
                     .insert(left.cmk_clone());
             }
@@ -280,7 +283,7 @@ impl Config {
                 let token_set: HashSet<Token> = self
                     .re
                     .split(&result_line)
-                    .filter_map(Token::new_or_none)
+                    .filter_map(|s| Token::new_or_error(s).ok())
                     // cmk00 regex: With result lines we remove tokens that are empty or that contain any digits.
                     // cmk00 regex: a result token could contain a '*' but it would never match a name or city.
                     .collect();
@@ -418,8 +421,9 @@ impl Config {
             .re
             .split(name_or_city)
             // cmk00 regex: We filter out empty anything with numbers. Similar code is elsewhere.
-            .filter_map(Token::new_or_none)
-            .collect::<HashSet<_>>();
+            .filter(|name| !name.is_empty())
+            .map(Token::new_or_error)
+            .collect::<Result<HashSet<_>, _>>()?;
         // cmk test that if a nickname is in the main set, it's not in the nickname set
         let nickname_set: HashSet<Token> = main_set
             .iter()

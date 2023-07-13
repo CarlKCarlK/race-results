@@ -328,7 +328,28 @@ fn spot_check() {
 }
 
 #[test]
-fn bad_member_data() {
+fn bad_member_data_2() {
+    let member_lines = "a\tb\tc\naa\tbb*b\tcc\n".lines();
+    let result_lines = SAMPLE_RESULTS_STR.lines();
+    let include_city = true;
+
+    let matches = Config::default().find_matches(
+        member_lines.clone(),
+        result_lines.clone(),
+        result_lines,
+        include_city,
+    );
+    assert_eq!(
+        matches.map_err(|e| e.to_string()),
+        Err(anyhow!(
+            "String must be alphabetic with (ignored . and ') and then not empty, not \"BB*B\"."
+        )
+        .to_string())
+    );
+}
+
+#[test]
+fn bad_member_data_1() {
     let member_lines = "a\tb\tc\naa\tbb\n".lines();
     let result_lines = SAMPLE_RESULTS_STR.lines();
     let include_city = true;
@@ -344,18 +365,6 @@ fn bad_member_data() {
             anyhow!("Line should be First,Last,City separated by tab or comma, not 'aa\tbb'")
                 .to_string()
         )
-    );
-
-    let member_lines = "a\tb\tc\naa\tbb*b\tcc\n".lines();
-    let matches = Config::default().find_matches(
-        member_lines.clone(),
-        result_lines.clone(),
-        result_lines,
-        include_city,
-    );
-    assert_eq!(
-        matches.map_err(|e| e.to_string()),
-        Err(anyhow!("Item 'BB*B' should contain only A-Za-z, '.', and '\''").to_string())
     );
 }
 

@@ -491,7 +491,7 @@ Donald	Don/Donny
 Ebenezer	Eben/Eb/Ebbie
 Edmund	Ed/Ned/Ted/Eddie
 Edward	Ed/Ned/Ted/Teddy/Eddie
-Edwin	Ed//Eddie/Ned/Win
+Edwin	Ed/Eddie/Ned/Win
 Elbert	Albert/Bert/Birt/Bird
 Eleazer	Lazar
 Elias	Eli/Lee/Lias
@@ -788,8 +788,7 @@ Raymond	Ray
 Reginald	Reg/Reggie/Naldo/Renny
 Reuben	Rube
 Richard	Dick/Dickon/Rich/Rick/Ricky
-Robert	Bob/Dob/Dobbin/Hob/Hobkin/Rob/
-Robby/Bobby/Robin	Rupert
+Robert	Bob/Dob/Dobbin/Hob/Hobkin/Rob/Robby/Bobby/Robin/Rupert
 Roger/Rodger	Roge/Hodge/Rod
 Roland	Lanny/Rollo/Rolly/Orlando
 Ronald	Ron/Ronny/Naldo
