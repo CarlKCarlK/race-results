@@ -16,7 +16,9 @@ pub fn member_match(members: &str, race_results: &str, include_city: bool) -> Js
         race_results.lines(),
         include_city,
     );
-    let s = match function_result {
+    let s = match function_result.as_deref() {
+        // cmk make this 1% configurable
+        Ok([]) => "No matches found above probability 1%".to_string(),
         Ok(match_list) => match_list.join("\n"),
         Err(panic) => format!("Error: {:?}", panic),
     };
@@ -34,7 +36,6 @@ pub fn sample_results() -> JsValue {
 }
 
 // cmk what if say "match with city" before uploading a file
-// cmk0 when match results are empty, show something
 // cmk should there be an hour glass or something while the results are being computed?
 // cmk is there way (and should) for javascript to download the big file and pass it over.
 // cmk0 does it do the right thing if a name is blank?

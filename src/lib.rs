@@ -108,6 +108,7 @@ pub struct TokenToCoincidence {
 impl TokenToCoincidence {
     pub fn default_names() -> Self {
         let mut name_to_coincidence = HashMap::new();
+        // cmk00 regex: We should validate that these names don't have, e.g., * space, ', etc.
         for line in NAME_TO_PROB_STR.lines().skip(1) {
             let parts: Vec<&str> = line.split('\t').collect();
             let name = parts[0];
@@ -132,12 +133,15 @@ impl TokenToCoincidence {
 
 fn extract_name_to_nicknames_set() -> HashMap<String, HashSet<String>> {
     let mut name_to_nickname_set = HashMap::<String, HashSet<String>>::new();
+
+    // cmk00 regex: We should valdiate that the names don't have, e.g., * space, ', etc.
     for nickname_line in NICKNAMES_STR.lines() {
         // expect one tab
         let left;
         let right;
         // cmk make this nicer
         if let Some((leftx, rightx)) = nickname_line.split('\t').collect_tuple() {
+            // cmk00 regex: nickname data: to upper case. (What's the "ascii" mean here?)
             left = leftx.to_ascii_uppercase();
             right = rightx.to_ascii_uppercase();
         } else {
@@ -148,8 +152,10 @@ fn extract_name_to_nicknames_set() -> HashMap<String, HashSet<String>> {
         let left_and_right = left_and_right
             .iter()
             .map(|side| {
+                // cmk00 regex: nickname data: this is the 2nd place we split on /
                 side.split('/')
                     .map(|name| {
+                        // cmk00 regex: nickname data: We check that ascii or .
                         // panic if not [A-Z.]
                         name.chars().for_each(|c| {
                             if !c.is_ascii_alphabetic() && c != '.' {
@@ -242,12 +248,15 @@ impl Config {
     fn tokenize_race_results(&self, result_lines: AnyIter<AnyString>) -> Vec<HashSet<String>> {
         result_lines
             .map(|result_line| {
+                // cmk00 regex: reace results We capitalize the result line before splitting
                 let result_line = result_line.as_ref().to_ascii_uppercase();
+                // cmk00 regex: We split result lines on the regex
                 let token_set: HashSet<String> = self
                     .re
                     .split(&result_line)
                     .map(|s| s.to_owned())
-                    // cmk00 regex related
+                    // cmk00 regex: With result lines we remove tokens that are empty or that contain any digits.
+                    // cmk00 regex: a result token could contain a '*' but it would never match a name or city.
                     .filter(|token| !token.is_empty() && !token.chars().any(|c| c.is_ascii_digit()))
                     .collect();
                 // println!("token_set={:?}", token_set);
@@ -354,6 +363,7 @@ impl Config {
         name_or_city: &str,
         token_to_nickname_set: &HashMap<String, HashSet<String>>,
     ) -> Result<Vec<Dist>, anyhow::Error> {
+        // cmk00 regex: We split name_or_city on whitespace and hyphens, why not the regex?
         name_or_city
             .split(|c: char| c.is_whitespace() || c == '-')
             .map(|token| self.split_token(token, token_to_nickname_set))
@@ -378,9 +388,11 @@ impl Config {
             (0.0..=1.0).contains(&self.total_nickname),
             "Expect total_nickname to be between 0 and 1"
         );
+        // cmk00 regex: We split the name or city on the regex. How does this fit with extract_dist_list's split?
         let main_set = self
             .re
             .split(name)
+            // cmk00 regex: We filter out empty anything with numbers. Similar code is elsewhere.
             .filter(|token| !token.is_empty() && !token.chars().any(|c| c.is_ascii_digit()))
             .map(|s| s.to_owned())
             .collect::<HashSet<_>>();
@@ -450,7 +462,6 @@ impl Config {
         for (id, line) in member_lines.enumerate() {
             let line = line.as_ref();
             // cmk println!("line={:?}", line);
-            // cmk00 regex related
             let (first_name, last_name, city) = if let Some((first, last, city)) =
                 line.split(|c| c == '\t' || c == ',').collect_tuple()
             {
@@ -461,14 +472,14 @@ impl Config {
                 );
             };
 
+            // cmk00 regex: We upper case first, last, and city
             let first_name = first_name.to_uppercase();
             let last_name = last_name.to_uppercase();
             let city = city.to_uppercase();
 
+            // cmk00 let's compile first and last sooner.
             let first_dist_list = self.extract_dist_list(&first_name, &name_to_nickname_set)?;
-
             let last_dist_list = self.extract_dist_list(&last_name, &name_to_nickname_set)?;
-
             let mut name_dist_list = first_dist_list;
             name_dist_list.extend(last_dist_list);
 

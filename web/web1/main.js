@@ -50,6 +50,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
     init().then(() => {
         document.getElementById('members').value = sample_members();
         document.getElementById('results').value = sample_results();
+        document.getElementById('loadingScreen').style.display = 'none';
     });
 });
 
