@@ -38,4 +38,3 @@ pub fn sample_results() -> JsValue {
 // cmk what if say "match with city" before uploading a file
 // cmk should there be an hour glass or something while the results are being computed?
 // cmk is there way (and should) for javascript to download the big file and pass it over.
-// cmk0 does it do the right thing if a name is blank?

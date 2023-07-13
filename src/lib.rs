@@ -170,7 +170,6 @@ impl TokenToCoincidence {
 fn extract_name_to_nicknames_set() -> HashMap<Token, HashSet<Token>> {
     let mut name_to_nickname_set = HashMap::<Token, HashSet<Token>>::new();
 
-    // cmk00 regex: We should valdiate that the names don't have, e.g., * space, ', etc.
     for nickname_line in NICKNAMES_STR.lines() {
         let left_and_right: Vec<&str> = nickname_line.split('\t').collect_vec();
         assert_eq!(
@@ -277,15 +276,12 @@ impl Config {
     fn tokenize_race_results(&self, result_lines: AnyIter<AnyString>) -> Vec<HashSet<Token>> {
         result_lines
             .map(|result_line| {
-                // cmk00 regex: reace results We capitalize the result line before splitting
-                let result_line = result_line.as_ref().to_ascii_uppercase();
+                let result_line = result_line.as_ref();
                 // cmk00 regex: We split result lines on the regex
                 let token_set: HashSet<Token> = self
                     .re
-                    .split(&result_line)
+                    .split(result_line)
                     .filter_map(|s| Token::new_or_error(s).ok())
-                    // cmk00 regex: With result lines we remove tokens that are empty or that contain any digits.
-                    // cmk00 regex: a result token could contain a '*' but it would never match a name or city.
                     .collect();
                 // println!("token_set={:?}", token_set);
                 token_set
@@ -420,7 +416,6 @@ impl Config {
         let main_set = self
             .re
             .split(name_or_city)
-            // cmk00 regex: We filter out empty anything with numbers. Similar code is elsewhere.
             .filter(|name| !name.is_empty())
             .map(Token::new_or_error)
             .collect::<Result<HashSet<_>, _>>()?;
@@ -460,18 +455,6 @@ impl Config {
                 .collect_vec(),
         };
 
-        // cmk it doesn't make sense to pull out the strings when we had them earlier
-        // cmk assert that every first_name_list, last_name, city contains only A-Z cmk update
-        // cmk maybe use compiled regular expressions
-        // cmk00 regex
-        // cmk00 this is not the right place for this
-        // for item in dist.tokens() {
-        //     for c in item.chars() {
-        //         if !(c.is_ascii_alphabetic() || c == '.' || c == '\'') {
-        //             anyhow::bail!("Item '{item}' should contain only A-Za-z, '.', and '\''");
-        //         }
-        //     }
-        // }
         Ok(dist)
     }
 
@@ -500,11 +483,6 @@ impl Config {
                     "Line should be First,Last,City separated by tab or comma, not '{line}'"
                 );
             };
-
-            // cmk00 regex: We upper case first, last, and city
-            let first_name = first_name.to_uppercase();
-            let last_name = last_name.to_uppercase();
-            let city = city.to_uppercase();
 
             // cmk00 let's compile first and last sooner.
             let first_dist_list = self.extract_dist_list(&first_name, &name_to_nickname_set)?;
