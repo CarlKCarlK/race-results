@@ -2,7 +2,7 @@
 // #![cfg(not(target_arch = "wasm32"))]
 
 use crate::{
-    delta_many_names, delta_one, delta_one_name, log_odds, prob, read_lines, Config,
+    delta_many_names, delta_one, delta_one_name, log_odds, prob, read_lines, Config, Token,
     TokenToCoincidence, SAMPLE_MEMBERS_STR, SAMPLE_RESULTS_STR,
 };
 use anyhow::anyhow;
@@ -25,7 +25,7 @@ fn notebook() {
     // Someone else leads to "Robert"
 
     let name_to_conincidence = TokenToCoincidence::default_names();
-    let prob_coincidence = name_to_conincidence.prob("ROBERT");
+    let prob_coincidence = name_to_conincidence.prob(&Token::new("ROBERT"));
     println!("{prob_coincidence}"); // => 0.03143
 
     // "Robert" is from Robert
@@ -61,10 +61,10 @@ fn notebook() {
         prior_points, prior_prob
     );
 
-    let first_name_points = (prob_right / name_to_conincidence.prob("ROBERT")).ln();
+    let first_name_points = (prob_right / name_to_conincidence.prob(&Token::new("ROBERT"))).ln();
     println!("first_name: {:.2} points", first_name_points);
 
-    let last_name_points = (prob_right / name_to_conincidence.prob("SCOTT")).ln();
+    let last_name_points = (prob_right / name_to_conincidence.prob(&Token::new("SCOTT"))).ln();
     println!("last_name: {:.2} points", last_name_points);
 
     let post_points = prior_points + first_name_points + last_name_points;
@@ -75,13 +75,13 @@ fn notebook() {
     );
     assert_eq!(post_points, -3.8642664);
 
-    let first_name = "CHELLIE";
-    let last_name = "PINGREE";
+    let first_name = &Token::new("CHELLIE");
+    let last_name = &Token::new("PINGREE");
 
     println!(
         "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-        format!("contains_{first_name}"),
-        format!("contains_{last_name}"),
+        format!("contains_{first_name:?}"),
+        format!("contains_{last_name:?}"),
         "prior prob",
         "prior points",
         "first name points",
@@ -141,15 +141,21 @@ fn notebook() {
     ]
     .iter()
     {
+        let name = Token::new(name);
         let some_first_name_points =
-            delta_one_name(*contains, name, *prob_right, &name_to_conincidence);
-        println!("\t{}: {:.2} points", name, some_first_name_points);
+            delta_one_name(*contains, &name, *prob_right, &name_to_conincidence);
+        println!("\t{:?}: {:.2} points", &name, some_first_name_points);
         first_name_points = first_name_points.max(some_first_name_points);
     }
     println!("first_name: {:.2} points", first_name_points);
     assert_eq!(first_name_points, 4.50986);
 
-    let last_name_points = delta_one_name(true, "SCOTT", prob_right, &name_to_conincidence);
+    let last_name_points = delta_one_name(
+        true,
+        &Token::new("SCOTT"),
+        prob_right,
+        &name_to_conincidence,
+    );
     println!("last_name: {:.2} points", last_name_points);
     assert_eq!(last_name_points, 4.699481);
 
@@ -169,13 +175,22 @@ fn notebook() {
 
     let first_name_points = delta_many_names(
         &[true, true, false],
-        ["ROBERT", "BOB", "ROB"],
+        &[
+            &Token::new("ROBERT"),
+            &Token::new("BOB"),
+            &Token::new("ROB"),
+        ],
         &[0.50, 0.05, 0.05],
         &name_to_conincidence,
     );
     assert_eq!(first_name_points, 4.50986);
 
-    let last_name_points = delta_one_name(true, "SCOTT", prob_right, &name_to_conincidence);
+    let last_name_points = delta_one_name(
+        true,
+        &Token::new("SCOTT"),
+        prob_right,
+        &name_to_conincidence,
+    );
     assert_eq!(last_name_points, 4.699481);
 
     let city_by_coincidence = (170 + 1) as f32 / (1592 + 2) as f32;
@@ -243,7 +258,7 @@ fn test2() {
 
     let first_name_points = delta_one_name(
         contains_first,
-        &person.first_name,
+        &Token::new(&person.first_name),
         prob_right,
         &name_to_conincidence,
     );
@@ -253,7 +268,7 @@ fn test2() {
 
     let last_name_points = delta_one_name(
         contains_last,
-        &person.last_name,
+        &Token::new(&person.last_name),
         prob_right,
         &name_to_conincidence,
     );
