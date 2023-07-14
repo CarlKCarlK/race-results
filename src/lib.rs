@@ -83,22 +83,20 @@ pub fn delta_one_name(
 }
 
 pub fn delta_many_names(
-    contains_list: &[bool],
+    contains_list: impl Iterator<Item = bool>,
     name_list: &[&Token],
-    prob_right_list: &[f32],
+    prob_right_list: impl Iterator<Item = f32>,
     name_to_coincidence: &TokenToCoincidence,
 ) -> f32 {
-    // cmk what if not found?
-    // cmk why bother with collect?
     let prob_coincidence_sequence = name_list.iter().map(|name| name_to_coincidence.prob(name));
     delta_many(contains_list, prob_coincidence_sequence, prob_right_list)
 }
 
 // zero length returns 0.0
 pub fn delta_many(
-    contains_list: &[bool],
+    contains_list: impl Iterator<Item = bool>,
     prob_coincidence_sequence: impl Iterator<Item = f32>,
-    prob_right_list: &[f32],
+    prob_right_list: impl Iterator<Item = f32>,
 ) -> f32 {
     // cmk instead we need a version of zip that panics if the lengths are different
     // assert_eq!(
@@ -112,12 +110,11 @@ pub fn delta_many(
     //     "lengths must match"
     // );
     let zipped = contains_list
-        .iter()
         .zip(prob_coincidence_sequence)
-        .zip(prob_right_list.iter());
+        .zip(prob_right_list);
     zipped
         .map(|((contains, prob_coincidence), prob_right)| {
-            delta_one(*contains, prob_coincidence, *prob_right)
+            delta_one(contains, prob_coincidence, prob_right)
         })
         .fold(0.0, |a, b| a.max(b))
 }
@@ -320,13 +317,7 @@ impl Config {
         let prior_points = log_odds(self.prob_member_in_race / results_count as f32);
 
         let mut line_people_list: Vec<LinePeople> = Vec::new();
-        for (result_line, result_tokens) in result_lines2.zip(results_as_tokens)
-        // .take(100)
-        {
-            // let cmk = result_line.as_ref().clone();
-            // if cmk.contains("test") {
-            //     println!("result_line");
-            // }
+        for (result_line, result_tokens) in result_lines2.zip(results_as_tokens) {
             let person_set = result_tokens
                 .iter()
                 .filter_map(|token| token_to_person_list.get(token))
@@ -349,10 +340,6 @@ impl Config {
                 let post_prob = prob(post_points);
 
                 if post_prob > self.threshold_probability {
-                    // println!(
-                    //     "cmk {person:?} {post_points:.2} {post_prob:.2} {}",
-                    //     result_line.as_ref()
-                    // );
                     match &mut line_people {
                         None => {
                             line_people = Some(LinePeople {
@@ -378,7 +365,6 @@ impl Config {
         line_people_list
     }
 
-    // cmk should tokens be there own type?
     fn extract_dist_list(
         &self,
         name_or_city_phrase: &str,
@@ -413,7 +399,7 @@ impl Config {
             .filter(|name| !name.is_empty())
             .map(Token::new_or_error)
             .collect::<Result<HashSet<_>, _>>()?;
-        // cmk test that if a nickname is in the main set, it's not in the nickname set
+
         let nickname_set: HashSet<Token> = main_set
             .iter()
             .filter_map(|token| token_to_nickname_set.get(token))
@@ -581,22 +567,13 @@ impl Config {
                     .map(|city_dist| city_dist.tokens().collect_vec())
                     .collect_vec();
 
-                let line = format!(
-                    "   {:.2} {:?} {:?}",
-                    // cmk if this is useful, make it a method
-                    prob,
-                    name_list,
-                    // cmk if this is useful, make it a method
-                    city_list,
-                );
+                let line = format!("   {:.2} {:?} {:?}", prob, name_list, city_list,);
                 line_list.push(line);
             }
         }
         line_list
     }
 }
-
-// cmk0 should O'Neil tokenize to ONEIL?
 
 #[derive(Debug)]
 struct Dist {
@@ -609,23 +586,17 @@ impl Dist {
     }
 
     // cmk return an iterator of f32
-    fn probs(&self) -> Vec<f32> {
-        self.token_and_prob
-            .iter()
-            .map(|(_token, prob)| *prob)
-            .collect_vec()
+    fn probs(&self) -> impl Iterator<Item = f32> + '_ {
+        self.token_and_prob.iter().map(|(_token, prob)| *prob)
     }
 
-    #[allow(clippy::let_and_return)]
-    fn delta(&self, contains_list: &[bool], token_to_coincidence: &TokenToCoincidence) -> f32 {
-        // cmk what if not found?
-        // cmk why bother with collect?
-        // it's weird that we look at tokens and probs separately
+    fn delta(
+        &self,
+        contains_list: impl Iterator<Item = bool>,
+        token_to_coincidence: &TokenToCoincidence,
+    ) -> f32 {
         let prob_coincidence_sequence = self.tokens().map(|token| token_to_coincidence.prob(token));
-        // cmk merge delta_many code to here
-        let delta = delta_many(contains_list, prob_coincidence_sequence, &self.probs());
-        // println!("cmk {self:?} {delta:?}");
-        delta
+        delta_many(contains_list, prob_coincidence_sequence, self.probs())
     }
 }
 
@@ -644,15 +615,8 @@ impl Person {
         to_coincidence: &'a TokenToCoincidence,
     ) -> impl Iterator<Item = f32> + 'a {
         dist_list.iter().map(move |dist| {
-            let contains_list: Vec<_> = dist
-                .tokens()
-                .map(|token| result_tokens.contains(token))
-                .collect();
-            // println!("cmk dist {dist:?}, dist.tokens {:?}, result tokens {result_tokens:?} contains_list {contains_list:?}", dist.tokens() );
-            // let token = dist.tokens()[0].clone();
-            // let contains1 = result_tokens.contains(&token);
-            // println!("cmk contains1 {contains1:?}");
-            dist.delta(&contains_list, to_coincidence)
+            let contains_list = dist.tokens().map(|token| result_tokens.contains(token));
+            dist.delta(contains_list, to_coincidence)
         })
     }
 

@@ -174,13 +174,13 @@ fn notebook() {
     // );
 
     let first_name_points = delta_many_names(
-        &[true, true, false],
+        [true, true, false].into_iter(),
         &[
             &Token::new("ROBERT"),
             &Token::new("BOB"),
             &Token::new("ROB"),
         ],
-        &[0.50, 0.05, 0.05],
+        [0.50, 0.05, 0.05].into_iter(),
         &name_to_conincidence,
     );
     assert_eq!(first_name_points, 4.50986);
