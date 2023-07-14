@@ -449,6 +449,17 @@ impl Config {
         Ok(dist)
     }
 
+    fn insert_into_map(
+        token_to_person_list: &mut HashMap<Token, Vec<Rc<Person>>>,
+        token: &Token,
+        person: &Rc<Person>,
+    ) {
+        token_to_person_list
+            .entry(token.clone())
+            .or_insert(Vec::new())
+            .push(person.clone());
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[anyinput]
     fn index_person_list(
@@ -458,29 +469,22 @@ impl Config {
         city_stop_words: HashSet<Token>,
         include_city: bool,
     ) -> Result<HashMap<Token, Vec<Rc<Person>>>, anyhow::Error> {
-        let city_to_nickname_set = HashMap::<Token, HashSet<Token>>::new();
         let name_to_nickname_set = extract_name_to_nicknames_set();
 
         let mut token_to_person_list = HashMap::<Token, Vec<Rc<Person>>>::new();
         for (id, line) in member_lines.enumerate() {
             let line = line.as_ref();
-            // cmk println!("line={:?}", line);
-            let (first_name, last_name, city) =
-                if let Some((first, last, city)) = line.split(is_comma_or_tab).collect_tuple() {
-                    (first, last, city)
-                } else {
-                    anyhow::bail!(
-                        "Line should be First,Last,City separated by tab or comma, not '{line}'"
-                    );
-                };
+            let fields = line.split(is_comma_or_tab).collect_vec();
+            if fields.len() != 3 {
+                anyhow::bail!(
+                    "Line should be First,Last,City separated by tab or comma, not '{line}'"
+                );
+            }
+            let name = format!("{} {}", fields[0], fields[1]);
+            let name_dist_list = self.extract_dist_list(&name, &name_to_nickname_set)?;
 
-            // cmk00 let's compile first and last sooner.
-            let first_dist_list = self.extract_dist_list(first_name, &name_to_nickname_set)?;
-            let last_dist_list = self.extract_dist_list(last_name, &name_to_nickname_set)?;
-            let mut name_dist_list = first_dist_list;
-            name_dist_list.extend(last_dist_list);
-
-            // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
+            let city = fields[2];
+            let city_to_nickname_set = HashMap::<Token, HashSet<Token>>::new(); // currently empty
             let city_dist_list = self.extract_dist_list(city, &city_to_nickname_set)?;
 
             let person = Rc::new(Person {
@@ -488,32 +492,24 @@ impl Config {
                 city_dist_list,
                 id,
             });
-            // cmk is there a way to avoid cloning keys?
-            // cmk change for loop to use functional
-            for name_dist in person.name_dist_list.iter() {
-                for name in name_dist.tokens() {
-                    if name_stop_words.contains(name) {
-                        continue;
-                    }
-                    token_to_person_list
-                        .entry(name.clone())
-                        .or_insert(Vec::new())
-                        .push(person.clone());
-                }
-            }
+
+            person
+                .name_dist_list
+                .iter()
+                .flat_map(|name_dist| name_dist.tokens())
+                .filter(|name| !name_stop_words.contains(name))
+                .for_each(|name| Self::insert_into_map(&mut token_to_person_list, name, &person));
 
             if include_city {
-                for city_dist in person.city_dist_list.iter() {
-                    for city in city_dist.tokens() {
-                        if !city_stop_words.contains(city) {
-                            token_to_person_list
-                                .entry(city.clone())
-                                .or_insert(Vec::new())
-                                .push(person.clone());
-                        }
-                    }
-                }
-            }
+                person
+                    .city_dist_list
+                    .iter()
+                    .flat_map(|city_dist| city_dist.tokens())
+                    .filter(|city| !city_stop_words.contains(city))
+                    .for_each(|city| {
+                        Self::insert_into_map(&mut token_to_person_list, city, &person)
+                    });
+            };
         }
         Ok(token_to_person_list)
     }
