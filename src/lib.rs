@@ -150,10 +150,7 @@ impl TokenToCoincidence {
             let prob = prob.parse::<f32>().unwrap();
             name_to_coincidence.insert(name, prob);
         }
-        let min_prob = *name_to_coincidence
-            .values()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap();
+        let min_prob = name_to_coincidence.values().fold(1.0f32, |a, b| a.min(*b));
         Self {
             token_to_prob: name_to_coincidence,
             default: min_prob,
@@ -246,11 +243,13 @@ impl Config {
         result_lines2: AnyIter<AnyString>,
         include_city: bool,
     ) -> Result<Vec<String>, anyhow::Error> {
+        self.assert_that_config_is_valid();
+
         let results_as_tokens = self.tokenize_race_results(result_lines);
 
         // from the tokens in the race results, look for one's that are too common to be useful
         let (name_stop_words, city_stop_words, city_to_coincidence) =
-            self.find_stop_words(&results_as_tokens, include_city);
+            self.find_stop_words(&results_as_tokens);
 
         let token_to_person_list =
             self.index_person_list(member_lines, name_stop_words, city_stop_words, include_city)?;
@@ -260,12 +259,26 @@ impl Config {
             &results_as_tokens,
             &token_to_person_list,
             &city_to_coincidence,
-            include_city,
         );
 
         let final_output = self.format_final_output(line_people_list);
 
         Ok(final_output)
+    }
+
+    fn assert_that_config_is_valid(&self) {
+        assert!(
+            self.total_nickname <= self.total_right / 2.0,
+            "Expect total nickname to be <= than half total_right"
+        );
+        assert!(
+            (0.0..=1.0).contains(&self.total_right),
+            "Expect total_right to be between 0 and 1"
+        );
+        assert!(
+            (0.0..=1.0).contains(&self.total_nickname),
+            "Expect total_nickname to be between 0 and 1"
+        );
     }
 
     #[anyinput]
@@ -284,10 +297,7 @@ impl Config {
     }
 
     // cmk "extract_" is a bad name
-    fn extract_result_token_and_line_count_list(
-        &self,
-        results_as_tokens: &[HashSet<Token>],
-    ) -> HashMap<Token, usize> {
+    fn count_result_tokens(&self, results_as_tokens: &[HashSet<Token>]) -> HashMap<Token, usize> {
         let result_token_to_line_count =
             results_as_tokens
                 .iter()
@@ -311,7 +321,6 @@ impl Config {
         results_as_tokens: &[HashSet<Token>],
         token_to_person_list: &HashMap<Token, Vec<Rc<Person>>>,
         city_to_coincidence: &TokenToCoincidence,
-        include_city: bool,
     ) -> Vec<LinePeople> {
         let results_count = self.extract_results_count(results_as_tokens);
         let prior_points = log_odds(self.prob_member_in_race / results_count as f32);
@@ -328,15 +337,9 @@ impl Config {
             for person in person_set.iter() {
                 let person = *person;
 
-                let name_points_sum = person.name_points(result_tokens, &self.name_to_coincidence);
-                let city_points_sum = if include_city {
-                    person.city_points(result_tokens, city_to_coincidence)
-                } else {
-                    0.0
-                };
-
-                let post_points = prior_points + name_points_sum + city_points_sum;
-
+                let post_points = prior_points
+                    + person.name_points(result_tokens, &self.name_to_coincidence)
+                    + person.city_points(result_tokens, city_to_coincidence);
                 let post_prob = prob(post_points);
 
                 if post_prob > self.threshold_probability {
@@ -381,19 +384,6 @@ impl Config {
         name_or_city: &str,
         token_to_nickname_set: &HashMap<Token, HashSet<Token>>,
     ) -> Result<Dist, anyhow::Error> {
-        // cmk move these
-        assert!(
-            self.total_nickname <= self.total_right / 2.0,
-            "Expect total nickname to be <= than half total_right"
-        );
-        assert!(
-            (0.0..=1.0).contains(&self.total_right),
-            "Expect total_right to be between 0 and 1"
-        );
-        assert!(
-            (0.0..=1.0).contains(&self.total_nickname),
-            "Expect total_nickname to be between 0 and 1"
-        );
         let main_set = name_or_city
             .split(is_slash_or_ampersand)
             .filter(|name| !name.is_empty())
@@ -469,7 +459,7 @@ impl Config {
             let name = format!("{} {}", fields[0], fields[1]);
             let name_dist_list = self.extract_dist_list(&name, &name_to_nickname_set)?;
 
-            let city = fields[2];
+            let city = if include_city { fields[2] } else { "" };
             let city_to_nickname_set = HashMap::<Token, HashSet<Token>>::new(); // currently empty
             let city_dist_list = self.extract_dist_list(city, &city_to_nickname_set)?;
 
@@ -486,16 +476,12 @@ impl Config {
                 .filter(|name| !name_stop_words.contains(name))
                 .for_each(|name| Self::insert_into_map(&mut token_to_person_list, name, &person));
 
-            if include_city {
-                person
-                    .city_dist_list
-                    .iter()
-                    .flat_map(|city_dist| city_dist.tokens())
-                    .filter(|city| !city_stop_words.contains(city))
-                    .for_each(|city| {
-                        Self::insert_into_map(&mut token_to_person_list, city, &person)
-                    });
-            };
+            person
+                .city_dist_list
+                .iter()
+                .flat_map(|city_dist| city_dist.tokens())
+                .filter(|city| !city_stop_words.contains(city))
+                .for_each(|city| Self::insert_into_map(&mut token_to_person_list, city, &person));
         }
         Ok(token_to_person_list)
     }
@@ -510,13 +496,11 @@ impl Config {
     fn find_stop_words(
         &self,
         results_as_tokens: &[HashSet<Token>],
-        include_city: bool,
     ) -> (HashSet<Token>, HashSet<Token>, TokenToCoincidence) {
         let results_count = self.extract_results_count(results_as_tokens);
         let city_coincidence_default = 1f32 / (results_count + 2) as f32;
 
-        let result_token_and_line_count_list =
-            self.extract_result_token_and_line_count_list(results_as_tokens);
+        let result_token_and_line_count_list = self.count_result_tokens(results_as_tokens);
 
         let mut name_stop_words = HashSet::<Token>::new();
         let mut city_stop_words = HashSet::<Token>::new();
@@ -526,17 +510,14 @@ impl Config {
         };
 
         for (token, count) in result_token_and_line_count_list.iter() {
-            // for each token, in order of decreasing frequency, print its point value as a city and name, present and absent
-            if include_city {
-                let results_count = self.extract_results_count(results_as_tokens);
-                let city_coincidence = (*count + 1) as f32 / (results_count + 2) as f32;
-                city_to_coincidence
-                    .token_to_prob
-                    .insert(token.clone(), city_coincidence);
-                let city_points_contains = delta_one(true, city_coincidence, self.total_right);
-                if city_points_contains < self.stop_words_points {
-                    city_stop_words.insert(token.clone());
-                }
+            let results_count = self.extract_results_count(results_as_tokens);
+            let city_coincidence = (*count + 1) as f32 / (results_count + 2) as f32;
+            city_to_coincidence
+                .token_to_prob
+                .insert(token.clone(), city_coincidence);
+            let city_points_contains = delta_one(true, city_coincidence, self.total_right);
+            if city_points_contains < self.stop_words_points {
+                city_stop_words.insert(token.clone());
             }
             let name_points_contains =
                 delta_one_name(true, token, self.total_right, &self.name_to_coincidence);
@@ -585,7 +566,6 @@ impl Dist {
         self.token_and_prob.iter().map(|(token, _prob)| token)
     }
 
-    // cmk return an iterator of f32
     fn probs(&self) -> impl Iterator<Item = f32> + '_ {
         self.token_and_prob.iter().map(|(_token, prob)| *prob)
     }
@@ -634,8 +614,7 @@ impl Person {
         city_to_coincidence: &TokenToCoincidence,
     ) -> f32 {
         Person::points(&self.city_dist_list, result_tokens, city_to_coincidence)
-            .reduce(|a, b| a.max(b))
-            .unwrap() // cmk we assume always at least one city
+            .fold(0.0f32, |a, b| a.max(b))
     }
 }
 
@@ -679,13 +658,11 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 // cmk have a page that shows for format of the members file.
 // cmk load the page with samples (which means having a small member's input)
 // cmk use HTML to show the output nicer
-// cmk display every error possible in the input data.
-// cmk need to remove ' from names (maybe ".")
 // cmk create good sample data
 // cmk give users sliders for prob threshold? and priors? etc.
 // cmk see the work doc for a mock up of the output
 // cmk link: https://carlkcarlk.github.io/race-results/matcher/v0.1.0/index.html
-// cmk we use name_to_coincidence twice, but we could use it once.
+// cmk I think this is OK. we use name_to_coincidence twice, but we could use it once.
 // cmk will every ESR member be listed when looking at the NYC marathon because 'redmond', etc is rare in the results?
 // cmk there must be a way to handle the city/vs not automatically.
 // cmk create better sample data

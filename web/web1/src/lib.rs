@@ -4,7 +4,7 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub fn member_match(members: &str, race_results: &str, include_city: bool) -> JsValue {
-    // cmk the work 'result' is used in two different ways here
+    // cmk the word 'result' is used in two different ways here
     let function_result = Config {
         // threshold_probability: 0.0,
         // override_results_count: Some(1081),
@@ -36,5 +36,4 @@ pub fn sample_results() -> JsValue {
 }
 
 // cmk what if say "match with city" before uploading a file
-// cmk should there be an hour glass or something while the results are being computed?
 // cmk is there way (and should) for javascript to download the big file and pass it over.
