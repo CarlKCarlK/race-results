@@ -17,7 +17,6 @@ alloc = []
 
 [dependencies]
 anyinput = "0.1.6"
-regex = "1.8.4"
 itertools = "0.10.5"
 include-flate = "0.2.0"
 anyhow = "1.0.71"

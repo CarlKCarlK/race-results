@@ -22,13 +22,25 @@ use core::{
 };
 use core::{f32::consts::E, iter::repeat};
 use itertools::Itertools;
-use regex::Regex;
 
 // // cmk file is not local
 flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/name_probability.tsv");
 flate!(static NICKNAMES_STR: str from "examples/nicknames.txt");
 flate!(pub static SAMPLE_MEMBERS_STR: str from "../../../Shares/RaceResults/sample_members.no_nicknames.tsv");
 flate!(pub static SAMPLE_RESULTS_STR: str from "../../../Shares/RaceResults/sample_results_withcity.txt");
+
+fn is_comma_or_tab(c: char) -> bool {
+    c == ',' || c == '\t'
+}
+fn is_slash_or_ampersand(c: char) -> bool {
+    c == '/' || c == '&'
+}
+fn is_whitespace_or_dash(c: char) -> bool {
+    c.is_whitespace() || c == '-'
+}
+fn is_any_separator(c: char) -> bool {
+    is_comma_or_tab(c) || is_slash_or_ampersand(c) || is_whitespace_or_dash(c)
+}
 
 #[derive(Eq, PartialEq, Hash, Debug)]
 pub struct Token(String);
@@ -145,7 +157,7 @@ impl TokenToCoincidence {
         // cmk00 regex: We should validate that these names don't have, e.g., * space, ', etc.
         for line in NAME_TO_PROB_STR.lines().skip(1) {
             // cmk what if not two parts?
-            let parts: Vec<&str> = line.split('\t').collect();
+            let parts: Vec<&str> = line.split(is_comma_or_tab).collect();
             // cmk00 regex:: what if not a good token?
             let name = Token::new(parts[0]);
             let prob = parts[1].parse::<f32>().unwrap();
@@ -171,7 +183,7 @@ fn extract_name_to_nicknames_set() -> HashMap<Token, HashSet<Token>> {
     let mut name_to_nickname_set = HashMap::<Token, HashSet<Token>>::new();
 
     for nickname_line in NICKNAMES_STR.lines() {
-        let left_and_right: Vec<&str> = nickname_line.split('\t').collect_vec();
+        let left_and_right: Vec<&str> = nickname_line.split(is_comma_or_tab).collect_vec();
         assert_eq!(
             left_and_right.len(),
             2,
@@ -181,7 +193,7 @@ fn extract_name_to_nicknames_set() -> HashMap<Token, HashSet<Token>> {
         let left_and_right = left_and_right
             .iter()
             .map(|side| {
-                side.split('/')
+                side.split(is_slash_or_ampersand)
                     .map(Token::new_or_error)
                     .collect::<Result<Vec<_>, _>>()
             })
@@ -196,7 +208,6 @@ fn extract_name_to_nicknames_set() -> HashMap<Token, HashSet<Token>> {
 
         for left in left_and_right[0].iter() {
             for right in left_and_right[1].iter() {
-                // cmk00 regex
                 name_to_nickname_set
                     .entry(left.cmk_clone())
                     .or_insert_with(HashSet::new)
@@ -217,7 +228,6 @@ pub struct Config {
     pub total_nickname: f32,
     pub name_to_coincidence: TokenToCoincidence,
     pub stop_words_points: f32,
-    pub re: Regex,
     pub threshold_probability: f32,
     pub override_results_count: Option<usize>,
 }
@@ -230,7 +240,6 @@ impl Default for Config {
             total_nickname: 0.1,
             name_to_coincidence: TokenToCoincidence::default_names(),
             stop_words_points: 3.0,
-            re: Regex::new(r"[\-/ &\t]+").unwrap(),
             threshold_probability: 0.01,
             override_results_count: None,
         }
@@ -278,9 +287,8 @@ impl Config {
             .map(|result_line| {
                 let result_line = result_line.as_ref();
                 // cmk00 regex: We split result lines on the regex
-                let token_set: HashSet<Token> = self
-                    .re
-                    .split(result_line)
+                let token_set: HashSet<Token> = result_line
+                    .split(is_any_separator)
                     .filter_map(|s| Token::new_or_error(s).ok())
                     .collect();
                 // println!("token_set={:?}", token_set);
@@ -389,7 +397,7 @@ impl Config {
     ) -> Result<Vec<Dist>, anyhow::Error> {
         // cmk00 regex: We split name_or_city on whitespace and hyphens, why not the regex?
         name_or_city_phrase
-            .split(|c: char| c.is_whitespace() || c == '-')
+            .split(is_whitespace_or_dash)
             .map(|name_or_city| self.split_token(name_or_city, token_to_nickname_set))
             .collect::<Result<Vec<_>, _>>()
     }
@@ -413,9 +421,8 @@ impl Config {
             "Expect total_nickname to be between 0 and 1"
         );
         // cmk00 regex: We split the name or city on the regex. How does this fit with extract_dist_list's split?
-        let main_set = self
-            .re
-            .split(name_or_city)
+        let main_set = name_or_city
+            .split(is_slash_or_ampersand)
             .filter(|name| !name.is_empty())
             .map(Token::new_or_error)
             .collect::<Result<HashSet<_>, _>>()?;
@@ -474,24 +481,23 @@ impl Config {
         for (id, line) in member_lines.enumerate() {
             let line = line.as_ref();
             // cmk println!("line={:?}", line);
-            let (first_name, last_name, city) = if let Some((first, last, city)) =
-                line.split(|c| c == '\t' || c == ',').collect_tuple()
-            {
-                (first, last, city)
-            } else {
-                anyhow::bail!(
-                    "Line should be First,Last,City separated by tab or comma, not '{line}'"
-                );
-            };
+            let (first_name, last_name, city) =
+                if let Some((first, last, city)) = line.split(is_comma_or_tab).collect_tuple() {
+                    (first, last, city)
+                } else {
+                    anyhow::bail!(
+                        "Line should be First,Last,City separated by tab or comma, not '{line}'"
+                    );
+                };
 
             // cmk00 let's compile first and last sooner.
-            let first_dist_list = self.extract_dist_list(&first_name, &name_to_nickname_set)?;
-            let last_dist_list = self.extract_dist_list(&last_name, &name_to_nickname_set)?;
+            let first_dist_list = self.extract_dist_list(first_name, &name_to_nickname_set)?;
+            let last_dist_list = self.extract_dist_list(last_name, &name_to_nickname_set)?;
             let mut name_dist_list = first_dist_list;
             name_dist_list.extend(last_dist_list);
 
             // cmk so "Mount/Mt./Mt Si" works, but "NYC/New York City" does not.
-            let city_dist_list = self.extract_dist_list(&city, &city_to_nickname_set)?;
+            let city_dist_list = self.extract_dist_list(city, &city_to_nickname_set)?;
 
             let person = Rc::new(Person {
                 name_dist_list,
@@ -750,3 +756,5 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 // cmkdoc the program assumes one result per line. Sometime when you cut and paste, a result will be split across many lines. I may
 // cmkdoc able to fix this in the future for popular websites with a little more code. Please send me examples of race results are split across many lines.
 // cmkdoc Mt./Mount/Mt Si but not NYC/New York City -- it splits on hyphens and spaces. Then slashes give alternatives for the single word.
+// cmkdoc member list is tab or comma columns. Names and cities can have muliple words separated by spaces or -.
+// cmkdoc finally alteratives are separated by / or &
