@@ -14,7 +14,6 @@ fn main() -> io::Result<()> {
     let result_lines = read_lines(results_file_name)?.map(|line| line.unwrap());
     // cmk this doesn't look good
     let result_lines2 = read_lines(results_file_name)?.map(|line| line.unwrap());
-    // cmk there should be a tokenize struct, etc.
     let line_list =
         Config::default().find_matches(member_lines, result_lines, result_lines2, include_city);
 

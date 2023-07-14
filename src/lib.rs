@@ -42,7 +42,7 @@ fn is_any_separator(c: char) -> bool {
     is_comma_or_tab(c) || is_slash_or_ampersand(c) || is_whitespace_or_dash(c)
 }
 
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Eq, PartialEq, Hash, Debug, Clone)]
 pub struct Token(String);
 
 impl Token {
@@ -70,11 +70,6 @@ impl Token {
             Err(e) => Err(e),
         }
     }
-
-    // cmk00 regex: Use Rc? use regular clone trait
-    pub fn cmk_clone(&self) -> Self {
-        Self(self.0.clone())
-    }
 }
 
 pub fn delta_one_name(
@@ -95,36 +90,34 @@ pub fn delta_many_names(
 ) -> f32 {
     // cmk what if not found?
     // cmk why bother with collect?
-    let prob_coincidence_list: Vec<_> = name_list
-        .iter()
-        .map(|name| name_to_coincidence.prob(name))
-        .collect();
-    delta_many(contains_list, &prob_coincidence_list, prob_right_list)
+    let prob_coincidence_sequence = name_list.iter().map(|name| name_to_coincidence.prob(name));
+    delta_many(contains_list, prob_coincidence_sequence, prob_right_list)
 }
 
 // zero length returns 0.0
 pub fn delta_many(
     contains_list: &[bool],
-    prob_coincidence_list: &[f32],
+    prob_coincidence_sequence: impl Iterator<Item = f32>,
     prob_right_list: &[f32],
 ) -> f32 {
-    assert_eq!(
-        contains_list.len(),
-        prob_coincidence_list.len(),
-        "lengths must match"
-    );
-    assert_eq!(
-        contains_list.len(),
-        prob_right_list.len(),
-        "lengths must match"
-    );
+    // cmk instead we need a version of zip that panics if the lengths are different
+    // assert_eq!(
+    //     contains_list.len(),
+    //     prob_coincidence_sequence.len(),
+    //     "lengths must match"
+    // );
+    // assert_eq!(
+    //     contains_list.len(),
+    //     prob_right_list.len(),
+    //     "lengths must match"
+    // );
     let zipped = contains_list
         .iter()
-        .zip(prob_coincidence_list.iter())
+        .zip(prob_coincidence_sequence)
         .zip(prob_right_list.iter());
     zipped
         .map(|((contains, prob_coincidence), prob_right)| {
-            delta_one(*contains, *prob_coincidence, *prob_right)
+            delta_one(*contains, prob_coincidence, *prob_right)
         })
         .fold(0.0, |a, b| a.max(b))
 }
@@ -154,13 +147,10 @@ pub struct TokenToCoincidence {
 impl TokenToCoincidence {
     pub fn default_names() -> Self {
         let mut name_to_coincidence = HashMap::new();
-        // cmk00 regex: We should validate that these names don't have, e.g., * space, ', etc.
         for line in NAME_TO_PROB_STR.lines().skip(1) {
-            // cmk what if not two parts?
-            let parts: Vec<&str> = line.split(is_comma_or_tab).collect();
-            // cmk00 regex:: what if not a good token?
-            let name = Token::new(parts[0]);
-            let prob = parts[1].parse::<f32>().unwrap();
+            let (name, prob) = line.split(is_comma_or_tab).collect_tuple().unwrap();
+            let name = Token::new(name);
+            let prob = prob.parse::<f32>().unwrap();
             name_to_coincidence.insert(name, prob);
         }
         let min_prob = *name_to_coincidence
@@ -209,13 +199,13 @@ fn extract_name_to_nicknames_set() -> HashMap<Token, HashSet<Token>> {
         for left in left_and_right[0].iter() {
             for right in left_and_right[1].iter() {
                 name_to_nickname_set
-                    .entry(left.cmk_clone())
+                    .entry(left.clone())
                     .or_insert_with(HashSet::new)
-                    .insert(right.cmk_clone());
+                    .insert(right.clone());
                 name_to_nickname_set
-                    .entry(right.cmk_clone())
+                    .entry(right.clone())
                     .or_insert_with(HashSet::new)
-                    .insert(left.cmk_clone());
+                    .insert(left.clone());
             }
         }
     }
@@ -286,7 +276,6 @@ impl Config {
         result_lines
             .map(|result_line| {
                 let result_line = result_line.as_ref();
-                // cmk00 regex: We split result lines on the regex
                 let token_set: HashSet<Token> = result_line
                     .split(is_any_separator)
                     .filter_map(|s| Token::new_or_error(s).ok())
@@ -307,7 +296,7 @@ impl Config {
                 .iter()
                 .flatten()
                 .fold(HashMap::new(), |mut acc, token| {
-                    *acc.entry(token.cmk_clone()).or_insert(0) += 1;
+                    *acc.entry(token.clone()).or_insert(0) += 1;
                     acc
                 });
         // let mut result_token_to_line_count_vec: Vec<(String, isize)> =
@@ -395,7 +384,6 @@ impl Config {
         name_or_city_phrase: &str,
         token_to_nickname_set: &HashMap<Token, HashSet<Token>>,
     ) -> Result<Vec<Dist>, anyhow::Error> {
-        // cmk00 regex: We split name_or_city on whitespace and hyphens, why not the regex?
         name_or_city_phrase
             .split(is_whitespace_or_dash)
             .map(|name_or_city| self.split_token(name_or_city, token_to_nickname_set))
@@ -420,7 +408,6 @@ impl Config {
             (0.0..=1.0).contains(&self.total_nickname),
             "Expect total_nickname to be between 0 and 1"
         );
-        // cmk00 regex: We split the name or city on the regex. How does this fit with extract_dist_list's split?
         let main_set = name_or_city
             .split(is_slash_or_ampersand)
             .filter(|name| !name.is_empty())
@@ -432,7 +419,7 @@ impl Config {
             .filter_map(|token| token_to_nickname_set.get(token))
             .flat_map(|nickname_set| nickname_set.iter())
             .filter(|nickname| !main_set.contains(nickname))
-            .map(|nickname| nickname.cmk_clone())
+            .cloned()
             .collect();
 
         let mut each_main: f32;
@@ -456,10 +443,7 @@ impl Config {
             .chain(repeat(each_nickname).take(nickname_set.len()));
 
         let dist = Dist {
-            token_and_prob: token_sequence
-                .map(|token| token.cmk_clone())
-                .zip(right_list)
-                .collect_vec(),
+            token_and_prob: token_sequence.cloned().zip(right_list).collect_vec(),
         };
 
         Ok(dist)
@@ -512,7 +496,7 @@ impl Config {
                         continue;
                     }
                     token_to_person_list
-                        .entry(name.cmk_clone())
+                        .entry(name.clone())
                         .or_insert(Vec::new())
                         .push(person.clone());
                 }
@@ -523,7 +507,7 @@ impl Config {
                     for city in city_dist.tokens() {
                         if !city_stop_words.contains(city) {
                             token_to_person_list
-                                .entry(city.cmk_clone())
+                                .entry(city.clone())
                                 .or_insert(Vec::new())
                                 .push(person.clone());
                         }
@@ -566,16 +550,16 @@ impl Config {
                 let city_coincidence = (*count + 1) as f32 / (results_count + 2) as f32;
                 city_to_coincidence
                     .token_to_prob
-                    .insert(token.cmk_clone(), city_coincidence);
+                    .insert(token.clone(), city_coincidence);
                 let city_points_contains = delta_one(true, city_coincidence, self.total_right);
                 if city_points_contains < self.stop_words_points {
-                    city_stop_words.insert(token.cmk_clone());
+                    city_stop_words.insert(token.clone());
                 }
             }
             let name_points_contains =
                 delta_one_name(true, token, self.total_right, &self.name_to_coincidence);
             if name_points_contains < self.stop_words_points {
-                name_stop_words.insert(token.cmk_clone());
+                name_stop_words.insert(token.clone());
             }
         }
         (name_stop_words, city_stop_words, city_to_coincidence)
@@ -641,12 +625,9 @@ impl Dist {
         // cmk what if not found?
         // cmk why bother with collect?
         // it's weird that we look at tokens and probs separately
-        let prob_coincidence_list: Vec<_> = self
-            .tokens()
-            .map(|token| token_to_coincidence.prob(token))
-            .collect();
+        let prob_coincidence_sequence = self.tokens().map(|token| token_to_coincidence.prob(token));
         // cmk merge delta_many code to here
-        let delta = delta_many(contains_list, &prob_coincidence_list, &self.probs());
+        let delta = delta_many(contains_list, prob_coincidence_sequence, &self.probs());
         // println!("cmk {self:?} {delta:?}");
         delta
     }
@@ -749,7 +730,6 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 // cmk there must be a way to handle the city/vs not automatically.
 // cmk create better sample data
 // cmk hard to use from a phone (is there an easy way to access address list?)
-// cmk0 understand the regex and similar code. Should it be compiled?
 
 // cmkdoc best on laptop
 // cmkdoc many races let see all the results on one page, but some such as the NYC Marathon (with 47,000 runners) doesn't.
