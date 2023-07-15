@@ -24,10 +24,10 @@ use core::{f32::consts::E, iter::repeat};
 use itertools::Itertools;
 
 // // cmk file is not local
-flate!(static NAME_TO_PROB_STR: str from "../../../Shares/RaceResults/name_probability.tsv");
+flate!(static NAME_TO_PROB_STR: str from "../../Shares/RaceResults/name_probability.tsv");
 flate!(static NICKNAMES_STR: str from "examples/nicknames.txt");
-flate!(pub static SAMPLE_MEMBERS_STR: str from "../../../Shares/RaceResults/sample_members.no_nicknames.tsv");
-flate!(pub static SAMPLE_RESULTS_STR: str from "../../../Shares/RaceResults/sample_results_withcity.txt");
+flate!(pub static SAMPLE_MEMBERS_STR: str from "../../Shares/RaceResults/sample_members.no_nicknames.tsv");
+flate!(pub static SAMPLE_RESULTS_STR: str from "../../Shares/RaceResults/sample_results_withcity.txt");
 
 fn is_comma_or_tab(c: char) -> bool {
     c == ',' || c == '\t'

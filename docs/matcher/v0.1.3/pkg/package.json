@@ -1,0 +1,14 @@
+{
+  "name": "web1",
+  "version": "0.1.2",
+  "files": [
+    "web1_bg.wasm",
+    "web1.js",
+    "web1.d.ts"
+  ],
+  "module": "web1.js",
+  "types": "web1.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

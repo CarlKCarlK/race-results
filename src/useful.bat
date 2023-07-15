@@ -1,3 +1,5 @@
+cargo install wasm-pack
+
 cargo test -- --nocapture
 cargo run --example esr
 

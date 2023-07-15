@@ -1,0 +1,53 @@
+textarea {
+    width: 100%;
+}
+
+button {
+    margin-top: 10px;
+}
+
+.small-indented {
+    font-size: 0.8em;
+    /* make it smaller */
+    text-indent: 20px;
+    /* indent the text */
+    margin-top: 5px;
+    /* little line spacing before it */
+    font-style: italic;
+    /* make it italic */
+    margin-bottom: 5px;
+}
+
+textarea {
+    width: 100%;
+    /* make it take up the full width */
+    resize: vertical;
+    /* allow only vertical resizing */
+}
+
+form {
+    margin: 20px;
+    display: none;
+    /* Hide the form initially */
+}
+
+form div {
+    margin-bottom: 10px;
+}
+
+#valueForm {
+    margin: 20px;
+    padding: 20px;
+    border: 1px solid black;
+    display: none;
+}
+
+#valueForm div {
+    margin-bottom: 10px;
+}
+
+.settingsLink {
+    cursor: pointer;
+    color: blue;
+    text-decoration: underline;
+}
