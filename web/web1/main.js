@@ -41,10 +41,27 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function convertSpaces(str, n) {
+    let chars = str.split('');
+    for (let i = 0, count = 0; i < chars.length; i++) {
+        if (chars[i] === '\n' || chars[i] === '\u00B6') {
+            count++;
+            chars[i] = count % n === 0 ? '\n' : '\u00B6';
+        }
+    }
+    return chars.join('');
+}
+
+function handleQuantityChange() {
+    const n = document.getElementById('quantity').value;
+    const textArea = document.getElementById('results');
+    textArea.value = convertSpaces(textArea.value, n);
+}
 
 window.callWasmFunction = callWasmFunction;
 window.loadMembersFromFile = loadMembersFromFile;
 window.loadResultsFromFile = loadResultsFromFile;
+window.handleQuantityChange = handleQuantityChange;
 
 window.addEventListener('DOMContentLoaded', (event) => {
     init().then(() => {

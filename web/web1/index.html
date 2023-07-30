@@ -47,9 +47,10 @@
   <p> </p>
 
   <label for="results"><b>Results</b> - paste or load from</label>
-  <input type="file" id="resultsFile" accept=".txt,.tsv" onchange="loadResultsFromFile()">
+  <input type="file" id="r>esultsFile" accept=".txt,.tsv" onchange="loadResultsFromFile()">
   <p class="small-indented">Plain text, one result per line but extra lines are OK.</p>
   <textarea id="results" rows="8"></textarea>
+  <p>Lines per result <input type="number" id="quantity" name="quantity" value="1" oninput="handleQuantityChange()"></input></p>
   <button onclick="callWasmFunction(true)">Match with City</button>
   <button onclick="callWasmFunction(false)">Match w/o City</button>
   <p></p>
