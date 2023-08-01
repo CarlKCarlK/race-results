@@ -346,18 +346,18 @@ impl Config {
             for person in person_set.iter() {
                 let person = *person;
 
-                let (name_points, name_score_list) =
-                    person.name_points(result_tokens, &self.name_to_coincidence);
-                let (city_points, city_score_list) =
-                    person.city_points(result_tokens, city_to_coincidence);
+                let name_points = person.name_points(result_tokens, &self.name_to_coincidence);
+                let city_points = person.city_points(result_tokens, city_to_coincidence);
 
-                let post_points = prior_points + name_points + city_points;
+                let post_points = prior_points + name_points.delta() + city_points.delta();
                 let post_prob = prob(post_points);
 
                 // cmk0
                 println!("cmk person={person:?}, result_tokens={result_tokens:?}");
-                println!("cmk {name_score_list:?}, {city_score_list:?}");
-                println!("cmk prior_points={prior_points}, name_points={name_points}, city_points={city_points}, post_points={post_points}");
+                println!("cmk {name_points:?}");
+                println!("cmk {city_points:?}");
+                println!("cmk prior_points={prior_points}, name_points={name_points}, city_points={city_points}, post_points={post_points}",
+                    name_points=name_points.delta(), city_points=city_points.delta());
 
                 if post_prob > self.threshold_probability {
                     match &mut line_people {
@@ -605,8 +605,13 @@ struct Person {
     city_dist_list: Vec<Dist>,
     id: usize,
 }
+
+trait Delta: core::fmt::Debug {
+    fn delta(&self) -> f32;
+}
+
 #[derive(Debug)]
-struct Score {
+struct SingleScore {
     token: Token,
     contains: bool,
     prob_right: f32,
@@ -614,68 +619,165 @@ struct Score {
     delta: f32,
 }
 
-impl Person {
-    fn points(
-        dist_list: &[Dist],
+impl SingleScore {
+    fn new(
         result_tokens: &HashSet<Token>,
-        // cmk why is this called token_to_coincidence elsewhere?
+        token: &Token,
         to_coincidence: &TokenToCoincidence,
-    ) -> (f32, Vec<Option<Score>>) {
-        // cmk0
-        let mut delta = 0.0f32;
-        let mut max_abs_score_or_none_vec: Vec<Option<Score>> = Vec::new();
-        for dist in dist_list.iter() {
-            let mut max_abs_score_or_none: Option<Score> = None;
-            for (token, prob) in dist.token_and_prob.iter() {
-                let contains = result_tokens.contains(token);
-                let prob_coincidence = to_coincidence.prob(token);
-                let prob_right = *prob;
-                let delta_inner = delta_one(contains, prob_coincidence, prob_right);
-                let score = Score {
-                    token: token.clone(),
-                    contains,
-                    prob_right,
-                    prob_coincidence,
-                    delta: delta_inner, // cmk don't let api users set this themselves
-                };
-                // cmk can this be formatted better?
-                max_abs_score_or_none = match max_abs_score_or_none {
-                    None => Some(score),
-                    Some(max_abs_score) => {
-                        if max_abs_score.delta.abs() < score.delta.abs() {
-                            Some(score)
-                        } else {
-                            Some(max_abs_score)
-                        }
-                    }
-                };
-            }
-            if let Some(max_abs_score_or_none) = &max_abs_score_or_none {
-                delta += &max_abs_score_or_none.delta;
-            }
-            max_abs_score_or_none_vec.push(max_abs_score_or_none);
-        }
+        prob: &f32,
+    ) -> SingleScore {
+        let contains = result_tokens.contains(token);
+        let prob_coincidence = to_coincidence.prob(token);
+        let prob_right = *prob;
+        let delta_inner = delta_one(contains, prob_coincidence, prob_right);
+        let score = SingleScore {
+            token: token.clone(),
+            contains,
+            prob_right,
+            prob_coincidence,
+            delta: delta_inner, // cmk don't let api users set this themselves
+        };
+        score
+    }
+}
 
-        println!("cmk delta {delta:?} delta {max_abs_score_or_none_vec:?}");
-        (delta, max_abs_score_or_none_vec)
+impl Delta for SingleScore {
+    fn delta(&self) -> f32 {
+        self.delta
+    }
+}
+
+#[derive(Debug)]
+struct DepScoreList {
+    score_list: Vec<Box<dyn Delta>>,
+    delta: f32,
+}
+
+impl Delta for DepScoreList {
+    fn delta(&self) -> f32 {
+        self.delta
+    }
+}
+
+impl Default for DepScoreList {
+    fn default() -> Self {
+        Self {
+            score_list: Vec::new(),
+            delta: 0.0,
+        }
+    }
+}
+
+impl FromIterator<Box<dyn Delta>> for DepScoreList {
+    fn from_iter<T: IntoIterator<Item = Box<dyn Delta>>>(iter: T) -> Self {
+        let mut dep_score_list = DepScoreList::default();
+        for score in iter {
+            dep_score_list.push(score);
+        }
+        dep_score_list
+    }
+}
+
+impl DepScoreList {
+    fn push(&mut self, score: Box<dyn Delta>) {
+        let score_delta = score.delta();
+        if self.score_list.len() == 0 || self.delta.abs() < score_delta.abs() {
+            self.delta = score_delta;
+        }
+        self.score_list.push(score);
     }
 
+    fn new(
+        dist: &Dist,
+        result_tokens: &HashSet<Token>,
+        to_coincidence: &TokenToCoincidence,
+    ) -> DepScoreList {
+        let mut dep_score_list = DepScoreList::default();
+        for (token, prob) in dist.token_and_prob.iter() {
+            let score = SingleScore::new(result_tokens, token, to_coincidence, prob);
+            dep_score_list.push(Box::new(score));
+        }
+        dep_score_list
+    }
+}
+
+// cmk most of the code is the same between IndScoreList and DepScoreList
+#[derive(Debug)]
+struct IndScoreList {
+    score_list: Vec<Box<dyn Delta>>,
+    delta: f32,
+}
+
+impl Delta for IndScoreList {
+    fn delta(&self) -> f32 {
+        self.delta
+    }
+}
+
+impl Default for IndScoreList {
+    fn default() -> Self {
+        Self {
+            score_list: Vec::new(),
+            delta: 0.0,
+        }
+    }
+}
+
+impl FromIterator<Box<dyn Delta>> for IndScoreList {
+    fn from_iter<T: IntoIterator<Item = Box<dyn Delta>>>(iter: T) -> Self {
+        let mut ind_score_list = IndScoreList::default();
+        for score in iter {
+            ind_score_list.push(score);
+        }
+        ind_score_list
+    }
+}
+
+impl IndScoreList {
+    fn push(&mut self, score: Box<dyn Delta>) {
+        self.delta += score.delta();
+        self.score_list.push(score);
+    }
+
+    fn new(
+        dist: &Dist,
+        result_tokens: &HashSet<Token>,
+        to_coincidence: &TokenToCoincidence,
+    ) -> IndScoreList {
+        let mut ind_score_list = IndScoreList::default();
+        for (token, prob) in dist.token_and_prob.iter() {
+            let score = SingleScore::new(result_tokens, token, to_coincidence, prob);
+            ind_score_list.push(Box::new(score));
+        }
+        ind_score_list
+    }
+}
+
+impl Person {
     pub fn name_points(
         &self,
         result_tokens: &HashSet<Token>,
         name_to_coincidence: &TokenToCoincidence,
-    ) -> (f32, Vec<Option<Score>>) {
+    ) -> IndScoreList {
         // cmk0
-        Person::points(&self.name_dist_list, result_tokens, name_to_coincidence)
+        self.name_dist_list
+            .iter()
+            .map(|dist| DepScoreList::new(dist, result_tokens, name_to_coincidence))
+            .map(|dep_score_list| Box::new(dep_score_list) as Box<dyn Delta>)
+            .collect()
     }
 
     pub fn city_points(
         &self,
         result_tokens: &HashSet<Token>,
         city_to_coincidence: &TokenToCoincidence,
-    ) -> (f32, Vec<Option<Score>>) {
+    ) -> DepScoreList {
         // cmk0
-        Person::points(&self.city_dist_list, result_tokens, city_to_coincidence)
+        self.city_dist_list
+            .iter()
+            .map(|dist| DepScoreList::new(dist, result_tokens, city_to_coincidence))
+            .map(|dep_score_list| Box::new(dep_score_list) as Box<dyn Delta>)
+            .collect()
     }
     // cmk be sure that init 0.0 is right
 }
