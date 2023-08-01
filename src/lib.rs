@@ -6,6 +6,7 @@ mod tests;
 
 extern crate alloc;
 
+use core::fmt;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::{
@@ -42,8 +43,14 @@ fn is_any_separator(c: char) -> bool {
     is_comma_or_tab(c) || is_slash_or_ampersand(c) || is_whitespace_or_dash(c)
 }
 
-#[derive(Eq, PartialEq, Hash, Debug, Clone)]
+#[derive(Eq, PartialEq, Hash, Clone)]
 pub struct Token(String);
+
+impl fmt::Debug for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
 
 impl Token {
     pub fn new(s: &str) -> Self {
@@ -92,34 +99,33 @@ pub fn delta_many_names(
     delta_many(contains_list, prob_coincidence_sequence, prob_right_list)
 }
 
+fn max_abs(a: f32, b: f32) -> f32 {
+    if a.abs() > b.abs() {
+        a
+    } else {
+        b
+    }
+}
+
 // zero length returns 0.0
+// cmk is there a big where it doesn't do negatives correctly?
 pub fn delta_many(
     contains_list: impl Iterator<Item = bool>,
     prob_coincidence_sequence: impl Iterator<Item = f32>,
     prob_right_list: impl Iterator<Item = f32>,
 ) -> f32 {
-    // cmk instead we need a version of zip that panics if the lengths are different
-    // assert_eq!(
-    //     contains_list.len(),
-    //     prob_coincidence_sequence.len(),
-    //     "lengths must match"
-    // );
-    // assert_eq!(
-    //     contains_list.len(),
-    //     prob_right_list.len(),
-    //     "lengths must match"
-    // );
     let zipped = contains_list
-        .zip(prob_coincidence_sequence)
-        .zip(prob_right_list);
+        .zip_eq(prob_coincidence_sequence)
+        .zip_eq(prob_right_list);
     zipped
         .map(|((contains, prob_coincidence), prob_right)| {
             delta_one(contains, prob_coincidence, prob_right)
         })
-        .fold(0.0, |a, b| a.max(b))
+        .fold(0.0f32, max_abs)
 }
+// cmk is max the right function when combining all negatives?
 
-#[inline]
+// cmk #[inline]
 pub fn delta_one(contains: bool, prob_coincidence: f32, prob_right: f32) -> f32 {
     if contains {
         (prob_right / prob_coincidence).ln()
@@ -247,7 +253,7 @@ impl Config {
 
         let results_as_tokens = self.tokenize_race_results(result_lines);
 
-        // from the tokens in the race results, look for one's that are too common to be useful
+        // Look for tokens in the race results that are too common to be useful
         let (name_stop_words, city_stop_words, city_to_coincidence) =
             self.find_stop_words(&results_as_tokens);
 
@@ -322,11 +328,14 @@ impl Config {
         token_to_person_list: &HashMap<Token, Vec<Rc<Person>>>,
         city_to_coincidence: &TokenToCoincidence,
     ) -> Vec<LinePeople> {
-        let results_count = self.extract_results_count(results_as_tokens);
+        let results_count = self.results_count(results_as_tokens);
         let prior_points = log_odds(self.prob_member_in_race / results_count as f32);
 
         let mut line_people_list: Vec<LinePeople> = Vec::new();
+
+        // for each line in the results
         for (result_line, result_tokens) in result_lines2.zip(results_as_tokens) {
+            // find people with at least one token in common with the result line
             let person_set = result_tokens
                 .iter()
                 .filter_map(|token| token_to_person_list.get(token))
@@ -337,10 +346,15 @@ impl Config {
             for person in person_set.iter() {
                 let person = *person;
 
-                let post_points = prior_points
-                    + person.name_points(result_tokens, &self.name_to_coincidence)
-                    + person.city_points(result_tokens, city_to_coincidence);
+                let name_points = person.name_points(result_tokens, &self.name_to_coincidence);
+                let city_points = person.city_points(result_tokens, city_to_coincidence);
+
+                let post_points = prior_points + name_points + city_points;
                 let post_prob = prob(post_points);
+
+                // cmk0
+                println!("person={person:?}, result_tokens={result_tokens:?}, prior_points={prior_points}, name_points={name_points}, city_points={city_points}, post_points={post_points}",
+                );
 
                 if post_prob > self.threshold_probability {
                     match &mut line_people {
@@ -486,7 +500,7 @@ impl Config {
         Ok(token_to_person_list)
     }
 
-    fn extract_results_count(&self, results_as_tokens: &[HashSet<Token>]) -> usize {
+    fn results_count(&self, results_as_tokens: &[HashSet<Token>]) -> usize {
         match self.override_results_count {
             Some(results_count) => results_count,
             None => results_as_tokens.len(),
@@ -497,7 +511,7 @@ impl Config {
         &self,
         results_as_tokens: &[HashSet<Token>],
     ) -> (HashSet<Token>, HashSet<Token>, TokenToCoincidence) {
-        let results_count = self.extract_results_count(results_as_tokens);
+        let results_count = self.results_count(results_as_tokens);
         let city_coincidence_default = 1f32 / (results_count + 2) as f32;
 
         let result_token_and_line_count_list = self.count_result_tokens(results_as_tokens);
@@ -510,7 +524,7 @@ impl Config {
         };
 
         for (token, count) in result_token_and_line_count_list.iter() {
-            let results_count = self.extract_results_count(results_as_tokens);
+            let results_count = self.results_count(results_as_tokens);
             let city_coincidence = (*count + 1) as f32 / (results_count + 2) as f32;
             city_to_coincidence
                 .token_to_prob
@@ -531,7 +545,7 @@ impl Config {
     fn format_final_output(&self, line_people_list: Vec<LinePeople>) -> Vec<String> {
         let mut line_list = Vec::new();
         for line_people in line_people_list.iter() {
-            let line = format!("{}", line_people.line);
+            let line = line_people.line.to_string();
             line_list.push(line);
             let mut person_prob_list = line_people.person_prob_list.clone();
             // sort by prob
@@ -575,6 +589,7 @@ impl Dist {
         contains_list: impl Iterator<Item = bool>,
         token_to_coincidence: &TokenToCoincidence,
     ) -> f32 {
+        // cmk0
         let prob_coincidence_sequence = self.tokens().map(|token| token_to_coincidence.prob(token));
         delta_many(contains_list, prob_coincidence_sequence, self.probs())
     }
@@ -594,9 +609,12 @@ impl Person {
         result_tokens: &'a HashSet<Token>,
         to_coincidence: &'a TokenToCoincidence,
     ) -> impl Iterator<Item = f32> + 'a {
+        // cmk0
         dist_list.iter().map(move |dist| {
             let contains_list = dist.tokens().map(|token| result_tokens.contains(token));
-            dist.delta(contains_list, to_coincidence)
+            let delta = dist.delta(contains_list, to_coincidence);
+            println!("cmk dist_list {:?} delta {}", dist, delta);
+            delta
         })
     }
 
@@ -605,6 +623,7 @@ impl Person {
         result_tokens: &HashSet<Token>,
         name_to_coincidence: &TokenToCoincidence,
     ) -> f32 {
+        // cmk0
         Person::points(&self.name_dist_list, result_tokens, name_to_coincidence).sum()
     }
 
@@ -613,9 +632,10 @@ impl Person {
         result_tokens: &HashSet<Token>,
         city_to_coincidence: &TokenToCoincidence,
     ) -> f32 {
-        Person::points(&self.city_dist_list, result_tokens, city_to_coincidence)
-            .fold(0.0f32, |a, b| a.max(b))
+        // cmk0
+        Person::points(&self.city_dist_list, result_tokens, city_to_coincidence).sum()
     }
+    // cmk be sure that init 0.0 is right
 }
 
 impl Ord for Person {

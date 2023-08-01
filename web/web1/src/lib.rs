@@ -38,3 +38,4 @@ pub fn sample_results() -> JsValue {
 // cmk what if say "match with city" before uploading a file
 // cmk is there way (and should) for javascript to download the big file and pass it over.
 // cmk matching on a single letter, like "j" seems too highly weighted.
+// cmk choosing the results file is ignored.

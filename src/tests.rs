@@ -7,6 +7,7 @@ use crate::{
 };
 use anyhow::anyhow;
 
+#[allow(clippy::format_in_format_args)]
 #[test]
 fn notebook() {
     // Random line is about Robert
