@@ -346,15 +346,18 @@ impl Config {
             for person in person_set.iter() {
                 let person = *person;
 
-                let name_points = person.name_points(result_tokens, &self.name_to_coincidence);
-                let city_points = person.city_points(result_tokens, city_to_coincidence);
+                let (name_points, name_score_list) =
+                    person.name_points(result_tokens, &self.name_to_coincidence);
+                let (city_points, city_score_list) =
+                    person.city_points(result_tokens, city_to_coincidence);
 
                 let post_points = prior_points + name_points + city_points;
                 let post_prob = prob(post_points);
 
                 // cmk0
-                println!("person={person:?}, result_tokens={result_tokens:?}, prior_points={prior_points}, name_points={name_points}, city_points={city_points}, post_points={post_points}",
-                );
+                println!("cmk person={person:?}, result_tokens={result_tokens:?}");
+                println!("cmk {name_score_list:?}, {city_score_list:?}");
+                println!("cmk prior_points={prior_points}, name_points={name_points}, city_points={city_points}, post_points={post_points}");
 
                 if post_prob > self.threshold_probability {
                     match &mut line_people {
@@ -584,15 +587,15 @@ impl Dist {
         self.token_and_prob.iter().map(|(_token, prob)| *prob)
     }
 
-    fn delta(
-        &self,
-        contains_list: impl Iterator<Item = bool>,
-        token_to_coincidence: &TokenToCoincidence,
-    ) -> f32 {
-        // cmk0
-        let prob_coincidence_sequence = self.tokens().map(|token| token_to_coincidence.prob(token));
-        delta_many(contains_list, prob_coincidence_sequence, self.probs())
-    }
+    // fn delta(
+    //     &self,
+    //     contains_list: impl Iterator<Item = bool>,
+    //     token_to_coincidence: &TokenToCoincidence,
+    // ) -> f32 {
+    //     // cmk0
+    //     let prob_coincidence_sequence = self.tokens().map(|token| token_to_coincidence.prob(token));
+    //     delta_many(contains_list, prob_coincidence_sequence, self.probs())
+    // }
 }
 
 // cmk which is it a Person and a Member?
@@ -602,38 +605,77 @@ struct Person {
     city_dist_list: Vec<Dist>,
     id: usize,
 }
+#[derive(Debug)]
+struct Score {
+    token: Token,
+    contains: bool,
+    prob_right: f32,
+    prob_coincidence: f32,
+    delta: f32,
+}
 
 impl Person {
-    fn points<'a>(
-        dist_list: &'a [Dist],
-        result_tokens: &'a HashSet<Token>,
-        to_coincidence: &'a TokenToCoincidence,
-    ) -> impl Iterator<Item = f32> + 'a {
+    fn points(
+        dist_list: &[Dist],
+        result_tokens: &HashSet<Token>,
+        // cmk why is this called token_to_coincidence elsewhere?
+        to_coincidence: &TokenToCoincidence,
+    ) -> (f32, Vec<Option<Score>>) {
         // cmk0
-        dist_list.iter().map(move |dist| {
-            let contains_list = dist.tokens().map(|token| result_tokens.contains(token));
-            let delta = dist.delta(contains_list, to_coincidence);
-            println!("cmk dist_list {:?} delta {}", dist, delta);
-            delta
-        })
+        let mut delta = 0.0f32;
+        let mut max_abs_score_or_none_vec: Vec<Option<Score>> = Vec::new();
+        for dist in dist_list.iter() {
+            let mut max_abs_score_or_none: Option<Score> = None;
+            for (token, prob) in dist.token_and_prob.iter() {
+                let contains = result_tokens.contains(token);
+                let prob_coincidence = to_coincidence.prob(token);
+                let prob_right = *prob;
+                let delta_inner = delta_one(contains, prob_coincidence, prob_right);
+                let score = Score {
+                    token: token.clone(),
+                    contains,
+                    prob_right,
+                    prob_coincidence,
+                    delta: delta_inner, // cmk don't let api users set this themselves
+                };
+                // cmk can this be formatted better?
+                max_abs_score_or_none = match max_abs_score_or_none {
+                    None => Some(score),
+                    Some(max_abs_score) => {
+                        if max_abs_score.delta.abs() < score.delta.abs() {
+                            Some(score)
+                        } else {
+                            Some(max_abs_score)
+                        }
+                    }
+                };
+            }
+            if let Some(max_abs_score_or_none) = &max_abs_score_or_none {
+                delta += &max_abs_score_or_none.delta;
+            }
+            max_abs_score_or_none_vec.push(max_abs_score_or_none);
+        }
+
+        println!("cmk delta {delta:?} delta {max_abs_score_or_none_vec:?}");
+        (delta, max_abs_score_or_none_vec)
     }
 
     pub fn name_points(
         &self,
         result_tokens: &HashSet<Token>,
         name_to_coincidence: &TokenToCoincidence,
-    ) -> f32 {
+    ) -> (f32, Vec<Option<Score>>) {
         // cmk0
-        Person::points(&self.name_dist_list, result_tokens, name_to_coincidence).sum()
+        Person::points(&self.name_dist_list, result_tokens, name_to_coincidence)
     }
 
     pub fn city_points(
         &self,
         result_tokens: &HashSet<Token>,
         city_to_coincidence: &TokenToCoincidence,
-    ) -> f32 {
+    ) -> (f32, Vec<Option<Score>>) {
         // cmk0
-        Person::points(&self.city_dist_list, result_tokens, city_to_coincidence).sum()
+        Person::points(&self.city_dist_list, result_tokens, city_to_coincidence)
     }
     // cmk be sure that init 0.0 is right
 }
