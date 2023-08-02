@@ -9,6 +9,7 @@ extern crate alloc;
 use core::fmt;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::ops::Range;
 use std::{
     fs::File,
     io::{self, BufRead, BufReader},
@@ -325,6 +326,78 @@ impl Config {
         result_token_to_line_count
     }
 
+    fn annotate_line<T: Score>(
+        result_line: &str,
+        result_tokens: &HashSet<Token>,
+        all_points: &T,
+    ) -> String {
+        let annotations = all_points.annotations();
+
+        // Find the first location of every token in the result line
+        let mut token_to_range: HashMap<Token, Range<usize>> = HashMap::new();
+        for s in result_line.split(is_any_separator) {
+            if let Ok(token) = Token::new_or_error(s) {
+                token_to_range.entry(token).or_insert_with(|| {
+                    let offset = s.as_ptr() as usize - result_line.as_ptr() as usize;
+                    offset..offset + s.len()
+                });
+            }
+        }
+
+        // Group annotations by common token
+        let mut token_to_annotation_list: HashMap<Token, Vec<Annotation>> = HashMap::new();
+        for annotation in annotations {
+            let get = token_to_annotation_list.get_mut(&annotation.token);
+            if let Some(list) = get {
+                list.push(annotation);
+            } else {
+                let list = vec![annotation.clone()];
+                token_to_annotation_list.insert(annotation.token.clone(), list);
+            }
+        }
+
+        // Find the location of every token in the annotations (some will be None)
+        let mut token_and_range = token_to_annotation_list
+            .keys()
+            .map(|token| {
+                let range_or_none = token_to_range.get(token).cloned();
+                (token.clone(), range_or_none)
+            })
+            .collect_vec();
+
+        // Sort the locations/tokens from back to found (with None first)
+        token_and_range.sort_by(|a, b| {
+            let a_range_or_none = a.1.as_ref();
+            let b_range_or_none = b.1.as_ref();
+            match (a_range_or_none, b_range_or_none) {
+                (None, None) => Ordering::Equal,
+                (None, Some(_)) => Ordering::Less,
+                (Some(_), None) => Ordering::Greater,
+                (Some(a_range), Some(b_range)) => b_range.start.cmp(&a_range.start),
+            }
+        });
+
+        // for every location/token (from the back), insert the annotationS into the result line
+        let mut annotated = result_line.to_string();
+        for (token, range_or_none) in token_and_range {
+            let annotation_set = &token_to_annotation_list[&token];
+            let pts_str = annotation_set
+                .iter()
+                .map(|annotation| format!("{:+.2}", annotation.delta))
+                .join("");
+            if let Some(range) = range_or_none {
+                let s = &result_line[range.clone()];
+                annotated.replace_range(
+                    range.clone(),
+                    &format!("<mark>{s}<sup>{pts_str} pts</sup></mark>"),
+                );
+            } else {
+                annotated.push_str(&format!("<mark style=\"background-color: red; color: white;\"> -Missing: {token}<sup>{pts_str} pts</sup></mark>"));
+            }
+        }
+        annotated
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[anyinput]
     fn find_matching_people_for_each_result_line(
@@ -341,6 +414,7 @@ impl Config {
 
         // for each line in the results
         for (result_line, result_tokens) in result_lines2.zip(results_as_tokens) {
+            let result_line = result_line.as_ref();
             // find people with at least one token in common with the result line
             let person_set = result_tokens
                 .iter()
@@ -354,34 +428,29 @@ impl Config {
 
                 let name_points = person.name_points(result_tokens, &self.name_to_coincidence);
                 let city_points = person.city_points(result_tokens, city_to_coincidence);
+                let all_points: Vec<Box<dyn Score>> =
+                    vec![Box::new(name_points), Box::new(city_points)];
+                let all_points: IndScoreList = all_points.into_iter().collect();
 
-                let post_points = prior_points + name_points.delta() + city_points.delta();
+                // let name_points = person.name_points(result_tokens, &self.name_to_coincidence);
+                // let city_points = person.city_points(result_tokens, city_to_coincidence);
+
+                let post_points = prior_points + all_points.delta();
                 let post_prob = prob(post_points);
-
-                // // cmk0
-                // println!("cmk person={person:?}, result_tokens={result_tokens:?}");
-                // println!(
-                //     "cmk name_point {name_points}",
-                //     name_points = name_points.html()
-                // );
-                // println!(
-                //     "cmk city_point {city_points}",
-                //     city_points = city_points.html()
-                // );
-                // println!("cmk prior_points={prior_points}, name_points={name_points}, city_points={city_points}, post_points={post_points}",
-                //     name_points=name_points.delta(), city_points=city_points.delta());
 
                 if post_prob > self.threshold_probability {
                     match &mut line_people {
                         None => {
+                            let annotated_line =
+                                Config::annotate_line(result_line, result_tokens, &all_points);
                             line_people = Some(LinePeople {
-                                line: result_line.as_ref().to_string(),
-                                html: format!(
+                                line: result_line.to_string(),
+                                show_work: format!(
                                     "<tr><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td></tr>",
-                                    result_line.as_ref(),
+                                    result_line,
                                     person,
-                                    name_points.html(),
-                                    city_points.html(),
+                                    annotated_line,
+                                    all_points.html(),
                                 ),
                                 max_prob: post_prob,
                                 person_prob_list: vec![(person.clone(), post_prob)],
@@ -569,7 +638,7 @@ impl Config {
         let mut line_list = Vec::new();
         for line_people in line_people_list.iter() {
             line_list.push(line_people.line.to_string());
-            line_list.push(line_people.html.to_string());
+            line_list.push(line_people.show_work.to_string());
             // let mut person_prob_list = line_people.person_prob_list.clone();
             // // sort by prob
             // person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
@@ -629,6 +698,13 @@ struct Person {
 trait Score: core::fmt::Debug {
     fn delta(&self) -> f32;
     fn html(&self) -> String;
+    fn annotations(&self) -> Vec<Annotation>;
+}
+
+#[derive(Clone)]
+struct Annotation {
+    token: Token,
+    delta: f32,
 }
 
 #[derive(Debug)]
@@ -663,6 +739,12 @@ impl SingleScore {
 }
 
 impl Score for SingleScore {
+    fn annotations(&self) -> Vec<Annotation> {
+        vec![Annotation {
+            token: self.token.clone(),
+            delta: self.delta,
+        }]
+    }
     fn delta(&self) -> f32 {
         self.delta
     }
@@ -710,6 +792,18 @@ struct DepScoreList {
 }
 
 impl Score for DepScoreList {
+    fn annotations(&self) -> Vec<Annotation> {
+        // cmk can/should abs_max be a method?
+        let abs_max = self
+            .score_list
+            .iter()
+            .find(|score| score.delta() == self.delta);
+        match abs_max {
+            Some(abs_max) => abs_max.annotations(),
+            None => vec![],
+        }
+    }
+
     fn delta(&self) -> f32 {
         self.delta
     }
@@ -794,6 +888,12 @@ struct IndScoreList {
 }
 
 impl Score for IndScoreList {
+    fn annotations(&self) -> Vec<Annotation> {
+        self.score_list
+            .iter()
+            .flat_map(|score| score.annotations())
+            .collect()
+    }
     fn delta(&self) -> f32 {
         self.delta
     }
@@ -924,7 +1024,7 @@ impl PartialEq for Person {
 
 struct LinePeople {
     line: String,
-    html: String,
+    show_work: String,
     max_prob: f32,
     person_prob_list: Vec<(Rc<Person>, f32)>,
 }

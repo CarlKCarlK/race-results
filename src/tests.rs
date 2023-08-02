@@ -1,6 +1,9 @@
 #![cfg(test)]
 // #![cfg(not(target_arch = "wasm32"))]
 
+use std::fs::File;
+use std::io::Write;
+
 use crate::{
     delta_many_names, delta_one, delta_one_name, log_odds, prob, read_lines, Config, Token,
     TokenToCoincidence, SAMPLE_MEMBERS_STR, SAMPLE_RESULTS_STR,
@@ -290,7 +293,7 @@ fn test2() {
 }
 
 #[test]
-fn sample_data() {
+fn sample_data() -> anyhow::Result<()> {
     let member_lines = SAMPLE_MEMBERS_STR.lines();
     let result_lines = SAMPLE_RESULTS_STR.lines();
     let include_city = true;
@@ -300,10 +303,13 @@ fn sample_data() {
         result_lines,
         include_city,
     );
-    let matches = matches.unwrap();
-    for line in matches.iter() {
-        println!("{}", line);
+
+    let mut file = File::create("sample_data.html")?;
+    for line in matches? {
+        writeln!(file, "{}", line)?;
     }
+
+    Ok(())
 }
 
 // cmk remove

@@ -1,3 +1,6 @@
 target/
 .vscode/
 output.txt
+sample_data.html
+web/web1/src/prototype.html
+sample_data2.html
