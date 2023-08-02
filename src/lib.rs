@@ -326,11 +326,7 @@ impl Config {
         result_token_to_line_count
     }
 
-    fn annotate_line<T: Score>(
-        result_line: &str,
-        result_tokens: &HashSet<Token>,
-        all_points: &T,
-    ) -> String {
+    fn annotate_line<T: Score>(result_line: &str, all_points: &T) -> String {
         let annotations = all_points.annotations();
 
         // Find the first location of every token in the result line
@@ -441,16 +437,16 @@ impl Config {
                 if post_prob > self.threshold_probability {
                     match &mut line_people {
                         None => {
-                            let annotated_line =
-                                Config::annotate_line(result_line, result_tokens, &all_points);
+                            let annotated_line = Config::annotate_line(result_line, &all_points);
                             line_people = Some(LinePeople {
                                 line: result_line.to_string(),
                                 show_work: format!(
-                                    "<tr><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td></tr>",
-                                    result_line,
-                                    person,
-                                    annotated_line,
-                                    all_points.html(),
+                                    "{prob:.2}%: {annotated_line}<p></p>{all_points}<p></p>",
+                                    prob = post_prob * 100.0,
+                                    annotated_line = annotated_line,
+                                    // result_line,
+                                    // person,
+                                    all_points = all_points.html(),
                                 ),
                                 max_prob: post_prob,
                                 person_prob_list: vec![(person.clone(), post_prob)],
@@ -637,7 +633,7 @@ impl Config {
     fn format_final_output(&self, line_people_list: Vec<LinePeople>) -> Vec<String> {
         let mut line_list = Vec::new();
         for line_people in line_people_list.iter() {
-            line_list.push(line_people.line.to_string());
+            // line_list.push(line_people.line.to_string());
             line_list.push(line_people.show_work.to_string());
             // let mut person_prob_list = line_people.person_prob_list.clone();
             // // sort by prob
