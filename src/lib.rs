@@ -52,6 +52,12 @@ impl fmt::Debug for Token {
     }
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl Token {
     pub fn new(s: &str) -> Self {
         Self(Token::to_canonical(s).unwrap())
@@ -352,18 +358,31 @@ impl Config {
                 let post_points = prior_points + name_points.delta() + city_points.delta();
                 let post_prob = prob(post_points);
 
-                // cmk0
-                println!("cmk person={person:?}, result_tokens={result_tokens:?}");
-                println!("cmk {name_points:?}");
-                println!("cmk {city_points:?}");
-                println!("cmk prior_points={prior_points}, name_points={name_points}, city_points={city_points}, post_points={post_points}",
-                    name_points=name_points.delta(), city_points=city_points.delta());
+                // // cmk0
+                // println!("cmk person={person:?}, result_tokens={result_tokens:?}");
+                // println!(
+                //     "cmk name_point {name_points}",
+                //     name_points = name_points.html()
+                // );
+                // println!(
+                //     "cmk city_point {city_points}",
+                //     city_points = city_points.html()
+                // );
+                // println!("cmk prior_points={prior_points}, name_points={name_points}, city_points={city_points}, post_points={post_points}",
+                //     name_points=name_points.delta(), city_points=city_points.delta());
 
                 if post_prob > self.threshold_probability {
                     match &mut line_people {
                         None => {
                             line_people = Some(LinePeople {
                                 line: result_line.as_ref().to_string(),
+                                html: format!(
+                                    "<tr><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td></tr>",
+                                    result_line.as_ref(),
+                                    person,
+                                    name_points.html(),
+                                    city_points.html(),
+                                ),
                                 max_prob: post_prob,
                                 person_prob_list: vec![(person.clone(), post_prob)],
                             })
@@ -545,29 +564,30 @@ impl Config {
         (name_stop_words, city_stop_words, city_to_coincidence)
     }
 
+    // cmk this should be a method of LinePeople ???
     fn format_final_output(&self, line_people_list: Vec<LinePeople>) -> Vec<String> {
         let mut line_list = Vec::new();
         for line_people in line_people_list.iter() {
-            let line = line_people.line.to_string();
-            line_list.push(line);
-            let mut person_prob_list = line_people.person_prob_list.clone();
-            // sort by prob
-            person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-            for (person, prob) in person_prob_list.iter() {
-                let name_list = person
-                    .name_dist_list
-                    .iter()
-                    .map(|name_dist| name_dist.tokens().collect_vec())
-                    .collect_vec();
-                let city_list = person
-                    .city_dist_list
-                    .iter()
-                    .map(|city_dist| city_dist.tokens().collect_vec())
-                    .collect_vec();
+            line_list.push(line_people.line.to_string());
+            line_list.push(line_people.html.to_string());
+            // let mut person_prob_list = line_people.person_prob_list.clone();
+            // // sort by prob
+            // person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            // for (person, prob) in person_prob_list.iter() {
+            //     let name_list = person
+            //         .name_dist_list
+            //         .iter()
+            //         .map(|name_dist| name_dist.tokens().collect_vec())
+            //         .collect_vec();
+            //     let city_list = person
+            //         .city_dist_list
+            //         .iter()
+            //         .map(|city_dist| city_dist.tokens().collect_vec())
+            //         .collect_vec();
 
-                let line = format!("   {:.2} {:?} {:?}", prob, name_list, city_list,);
-                line_list.push(line);
-            }
+            //     let line = format!("   {:.2} {:?} {:?}", prob, name_list, city_list,);
+            //     line_list.push(line);
+            // }
         }
         line_list
     }
@@ -606,8 +626,9 @@ struct Person {
     id: usize,
 }
 
-trait Delta: core::fmt::Debug {
+trait Score: core::fmt::Debug {
     fn delta(&self) -> f32;
+    fn html(&self) -> String;
 }
 
 #[derive(Debug)]
@@ -641,21 +662,85 @@ impl SingleScore {
     }
 }
 
-impl Delta for SingleScore {
+impl Score for SingleScore {
     fn delta(&self) -> f32 {
         self.delta
+    }
+
+    fn html(&self) -> String {
+        format!(
+                "<table border=\"1\" style=\"border-collapse: collapse; margin-right: 20px;\">
+                    <tr>
+                        <th colspan=\"2\" style=\"text-align: center; font-weight: bold;\">SingleScore</th>
+                    </tr>
+                    <tr>
+                        <td>token</td>
+                        <td>{}</td>
+                    </tr>
+                    <tr>
+                        <td>contains</td>
+                        <td>{}</td>
+                    </tr>
+                    <tr>
+                        <td>prob_right</td>
+                        <td>{}</td>
+                    </tr>
+                    <tr>
+                        <td>prob_coincid</td>
+                        <td>{}</td>
+                    </tr>
+                    <tr>
+                        <td>delta</td>
+                        <td>{}</td>
+                    </tr>
+                </table>",
+                self.token.to_string(),
+                self.contains,
+                self.prob_right,
+                self.prob_coincidence,
+                self.delta
+            )
     }
 }
 
 #[derive(Debug)]
 struct DepScoreList {
-    score_list: Vec<Box<dyn Delta>>,
+    score_list: Vec<Box<dyn Score>>,
     delta: f32,
 }
 
-impl Delta for DepScoreList {
+impl Score for DepScoreList {
     fn delta(&self) -> f32 {
         self.delta
+    }
+    fn html(&self) -> String {
+        format!(
+            "<table border=\"1\" style=\"border-collapse: collapse; width: max-content;\">
+        <tr>
+            <th colspan=\"2\" style=\"text-align: center; font-weight: bold;\">DepScoreList</th>
+        </tr>
+        <tr>
+            <td>score list</td>
+            <td>
+                <div style=\"display: flex; align-items: flex-start;\">
+                    {score_list}
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <td>delta</td>
+            <td>{delta}</td>
+        </tr>
+    </table>
+    ",
+            score_list = self
+                .score_list
+                .iter()
+                .map(|score| score.html())
+                .collect::<Vec<String>>()
+                .join("\n",),
+            delta = self.delta
+        )
     }
 }
 
@@ -668,8 +753,8 @@ impl Default for DepScoreList {
     }
 }
 
-impl FromIterator<Box<dyn Delta>> for DepScoreList {
-    fn from_iter<T: IntoIterator<Item = Box<dyn Delta>>>(iter: T) -> Self {
+impl FromIterator<Box<dyn Score>> for DepScoreList {
+    fn from_iter<T: IntoIterator<Item = Box<dyn Score>>>(iter: T) -> Self {
         let mut dep_score_list = DepScoreList::default();
         for score in iter {
             dep_score_list.push(score);
@@ -679,7 +764,7 @@ impl FromIterator<Box<dyn Delta>> for DepScoreList {
 }
 
 impl DepScoreList {
-    fn push(&mut self, score: Box<dyn Delta>) {
+    fn push(&mut self, score: Box<dyn Score>) {
         let score_delta = score.delta();
         if self.score_list.len() == 0 || self.delta.abs() < score_delta.abs() {
             self.delta = score_delta;
@@ -704,13 +789,42 @@ impl DepScoreList {
 // cmk most of the code is the same between IndScoreList and DepScoreList
 #[derive(Debug)]
 struct IndScoreList {
-    score_list: Vec<Box<dyn Delta>>,
+    score_list: Vec<Box<dyn Score>>,
     delta: f32,
 }
 
-impl Delta for IndScoreList {
+impl Score for IndScoreList {
     fn delta(&self) -> f32 {
         self.delta
+    }
+    fn html(&self) -> String {
+        format!(
+            "<table border=\"1\" style=\"border-collapse: collapse; width: max-content;\">
+            <tr>
+                <th colspan=\"2\" style=\"text-align: center; font-weight: bold;\">IndScoreList</th>
+            </tr>
+            <tr>
+                <td>score list</td>
+                <td>
+                    <div style=\"display: flex; align-items: flex-start;\">
+                        {score_list}
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <td>delta</td>
+                <td>{delta}</td>
+            </tr>
+        </table>
+        ",
+            score_list = self
+                .score_list
+                .iter()
+                .map(|score| score.html())
+                .collect::<Vec<String>>()
+                .join("\n",),
+            delta = self.delta
+        )
     }
 }
 
@@ -723,8 +837,8 @@ impl Default for IndScoreList {
     }
 }
 
-impl FromIterator<Box<dyn Delta>> for IndScoreList {
-    fn from_iter<T: IntoIterator<Item = Box<dyn Delta>>>(iter: T) -> Self {
+impl FromIterator<Box<dyn Score>> for IndScoreList {
+    fn from_iter<T: IntoIterator<Item = Box<dyn Score>>>(iter: T) -> Self {
         let mut ind_score_list = IndScoreList::default();
         for score in iter {
             ind_score_list.push(score);
@@ -734,7 +848,7 @@ impl FromIterator<Box<dyn Delta>> for IndScoreList {
 }
 
 impl IndScoreList {
-    fn push(&mut self, score: Box<dyn Delta>) {
+    fn push(&mut self, score: Box<dyn Score>) {
         self.delta += score.delta();
         self.score_list.push(score);
     }
@@ -763,7 +877,7 @@ impl Person {
         self.name_dist_list
             .iter()
             .map(|dist| DepScoreList::new(dist, result_tokens, name_to_coincidence))
-            .map(|dep_score_list| Box::new(dep_score_list) as Box<dyn Delta>)
+            .map(|dep_score_list| Box::new(dep_score_list) as Box<dyn Score>)
             .collect()
     }
 
@@ -776,7 +890,7 @@ impl Person {
         self.city_dist_list
             .iter()
             .map(|dist| DepScoreList::new(dist, result_tokens, city_to_coincidence))
-            .map(|dep_score_list| Box::new(dep_score_list) as Box<dyn Delta>)
+            .map(|dep_score_list| Box::new(dep_score_list) as Box<dyn Score>)
             .collect()
     }
     // cmk be sure that init 0.0 is right
@@ -810,6 +924,7 @@ impl PartialEq for Person {
 
 struct LinePeople {
     line: String,
+    html: String,
     max_prob: f32,
     person_prob_list: Vec<(Rc<Person>, f32)>,
 }
@@ -839,3 +954,4 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 // cmkdoc Mt./Mount/Mt Si but not NYC/New York City -- it splits on hyphens and spaces. Then slashes give alternatives for the single word.
 // cmkdoc member list is tab or comma columns. Names and cities can have muliple words separated by spaces or -.
 // cmkdoc finally alteratives are separated by / or &
+// cmk test creating nice HTML when the name is Seattle Seattle living in Seattle
