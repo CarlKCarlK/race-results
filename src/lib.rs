@@ -426,7 +426,8 @@ impl Config {
                 let city_points = person.city_points(result_tokens, city_to_coincidence);
                 let all_points: Vec<Box<dyn Score>> =
                     vec![Box::new(name_points), Box::new(city_points)];
-                let all_points: IndScoreList = all_points.into_iter().collect();
+                let all_points =
+                    IndScoreList::collect_and_title(all_points, "name+city".to_string());
 
                 // let name_points = person.name_points(result_tokens, &self.name_to_coincidence);
                 // let city_points = person.city_points(result_tokens, city_to_coincidence);
@@ -435,28 +436,28 @@ impl Config {
                 let post_prob = prob(post_points);
 
                 if post_prob > self.threshold_probability {
+                    let annotated_line = Config::annotate_line(result_line, &all_points);
+                    let show_work = format!(
+                        "{prob:.2}%: {annotated_line}<br/>{all_points}<br/>",
+                        prob = post_prob * 100.0,
+                        annotated_line = annotated_line,
+                        all_points = all_points.html(),
+                    );
                     match &mut line_people {
                         None => {
-                            let annotated_line = Config::annotate_line(result_line, &all_points);
                             line_people = Some(LinePeople {
                                 line: result_line.to_string(),
-                                show_work: format!(
-                                    "{prob:.2}%: {annotated_line}<p></p>{all_points}<p></p>",
-                                    prob = post_prob * 100.0,
-                                    annotated_line = annotated_line,
-                                    // result_line,
-                                    // person,
-                                    all_points = all_points.html(),
-                                ),
                                 max_prob: post_prob,
-                                person_prob_list: vec![(person.clone(), post_prob)],
+                                person_prob_list: vec![(person.clone(), post_prob, show_work)],
                             })
                         }
                         Some(line_people) => {
                             line_people.max_prob = line_people.max_prob.max(post_prob);
-                            line_people
-                                .person_prob_list
-                                .push((person.clone(), post_prob));
+                            line_people.person_prob_list.push((
+                                person.clone(),
+                                post_prob,
+                                show_work,
+                            ));
                         }
                     };
                 }
@@ -568,6 +569,7 @@ impl Config {
                 name_dist_list,
                 city_dist_list,
                 id,
+                input_text: line.to_string(),
             });
 
             person
@@ -631,27 +633,46 @@ impl Config {
 
     // cmk this should be a method of LinePeople ???
     fn format_final_output(&self, line_people_list: Vec<LinePeople>) -> Vec<String> {
+        // line_people_list.sort_by(|a, b| a.max_prob.partial_cmp(&b.max_prob).unwrap());
         let mut line_list = Vec::new();
         for line_people in line_people_list.iter() {
-            // line_list.push(line_people.line.to_string());
-            line_list.push(line_people.show_work.to_string());
-            // let mut person_prob_list = line_people.person_prob_list.clone();
-            // // sort by prob
-            // person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-            // for (person, prob) in person_prob_list.iter() {
-            //     let name_list = person
-            //         .name_dist_list
-            //         .iter()
-            //         .map(|name_dist| name_dist.tokens().collect_vec())
-            //         .collect_vec();
-            //     let city_list = person
-            //         .city_dist_list
-            //         .iter()
-            //         .map(|city_dist| city_dist.tokens().collect_vec())
-            //         .collect_vec();
+            line_list.push(format!("{}<br/>", line_people.line));
+            let mut person_prob_list = line_people.person_prob_list.clone();
+            person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            for (person, prob, show_work) in person_prob_list.iter() {
+                let input_text = person
+                    .input_text
+                    .replace('\t', "<span class=\"tab\"></span>");
+                line_list.push(format!(
+                    "{prob:.2}%: {person}<br/>",
+                    prob = prob * 100.0,
+                    person = input_text,
+                ));
+                line_list.push(format!("{show_work}<br/>"));
+            }
 
-            //     let line = format!("   {:.2} {:?} {:?}", prob, name_list, city_list,);
-            //     line_list.push(line);
+            //     };
+
+            //     // line_list.push(line_people.line.to_string());
+            //     line_list.push(line_people.show_work.to_string());
+            //     // let mut person_prob_list = line_people.person_prob_list.clone();
+            //     // // sort by prob
+            //     // person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            //     // for (person, prob) in person_prob_list.iter() {
+            //     //     let name_list = person
+            //     //         .name_dist_list
+            //     //         .iter()
+            //     //         .map(|name_dist| name_dist.tokens().collect_vec())
+            //     //         .collect_vec();
+            //     //     let city_list = person
+            //     //         .city_dist_list
+            //     //         .iter()
+            //     //         .map(|city_dist| city_dist.tokens().collect_vec())
+            //     //         .collect_vec();
+
+            //     //     let line = format!("   {:.2} {:?} {:?}", prob, name_list, city_list,);
+            //     //     line_list.push(line);
+            //     // }
             // }
         }
         line_list
@@ -689,12 +710,14 @@ struct Person {
     name_dist_list: Vec<Dist>,
     city_dist_list: Vec<Dist>,
     id: usize,
+    input_text: String,
 }
 
 trait Score: core::fmt::Debug {
     fn delta(&self) -> f32;
     fn html(&self) -> String;
     fn annotations(&self) -> Vec<Annotation>;
+    fn title(&self) -> String;
 }
 
 #[derive(Clone)]
@@ -705,6 +728,7 @@ struct Annotation {
 
 #[derive(Debug)]
 struct SingleScore {
+    title: String,
     token: Token,
     contains: bool,
     prob_right: f32,
@@ -723,14 +747,14 @@ impl SingleScore {
         let prob_coincidence = to_coincidence.prob(token);
         let prob_right = *prob;
         let delta_inner = delta_one(contains, prob_coincidence, prob_right);
-        let score = SingleScore {
+        SingleScore {
             token: token.clone(),
             contains,
             prob_right,
             prob_coincidence,
             delta: delta_inner, // cmk don't let api users set this themselves
-        };
-        score
+            title: "one token".to_string(),
+        }
     }
 }
 
@@ -744,12 +768,14 @@ impl Score for SingleScore {
     fn delta(&self) -> f32 {
         self.delta
     }
-
+    fn title(&self) -> String {
+        self.title.clone()
+    }
     fn html(&self) -> String {
         format!(
-                "<table border=\"1\" style=\"border-collapse: collapse; margin-right: 20px;\">
+            "<table border=\"1\" style=\"border-collapse: collapse; margin-right: 20px;\">
                     <tr>
-                        <th colspan=\"2\" style=\"text-align: center; font-weight: bold;\">SingleScore</th>
+                        <th colspan=\"2\" style=\"text-align: center; font-weight: bold;\">{}</th>
                     </tr>
                     <tr>
                         <td>token</td>
@@ -772,12 +798,13 @@ impl Score for SingleScore {
                         <td>{}</td>
                     </tr>
                 </table>",
-                self.token.to_string(),
-                self.contains,
-                self.prob_right,
-                self.prob_coincidence,
-                self.delta
-            )
+            self.title(),
+            self.token,
+            self.contains,
+            self.prob_right,
+            self.prob_coincidence,
+            self.delta
+        )
     }
 }
 
@@ -785,6 +812,7 @@ impl Score for SingleScore {
 struct DepScoreList {
     score_list: Vec<Box<dyn Score>>,
     delta: f32,
+    title: String,
 }
 
 impl Score for DepScoreList {
@@ -799,7 +827,9 @@ impl Score for DepScoreList {
             None => vec![],
         }
     }
-
+    fn title(&self) -> String {
+        self.title.clone()
+    }
     fn delta(&self) -> f32 {
         self.delta
     }
@@ -807,10 +837,9 @@ impl Score for DepScoreList {
         format!(
             "<table border=\"1\" style=\"border-collapse: collapse; width: max-content;\">
         <tr>
-            <th colspan=\"2\" style=\"text-align: center; font-weight: bold;\">DepScoreList</th>
+            <th colspan=\"2\" style=\"text-align: center; font-weight: bold;\">{title}</th>
         </tr>
         <tr>
-            <td>score list</td>
             <td>
                 <div style=\"display: flex; align-items: flex-start;\">
                     {score_list}
@@ -818,11 +847,11 @@ impl Score for DepScoreList {
             </td>
         </tr>
         <tr>
-            <td>delta</td>
-            <td>{delta}</td>
+            <td>points {delta}</td>
         </tr>
     </table>
     ",
+            title = self.title(),
             score_list = self
                 .score_list
                 .iter()
@@ -834,18 +863,23 @@ impl Score for DepScoreList {
     }
 }
 
-impl Default for DepScoreList {
-    fn default() -> Self {
-        Self {
+// impl DepScoreList {
+//     fn new(title: String) -> Self {
+//         Self {
+//             score_list: Vec::new(),
+//             delta: 0.0,
+//             title: title,
+//         }
+//     }
+// }
+
+impl DepScoreList {
+    fn collect_and_title<T: IntoIterator<Item = Box<dyn Score>>>(iter: T, title: String) -> Self {
+        let mut dep_score_list = DepScoreList {
             score_list: Vec::new(),
             delta: 0.0,
-        }
-    }
-}
-
-impl FromIterator<Box<dyn Score>> for DepScoreList {
-    fn from_iter<T: IntoIterator<Item = Box<dyn Score>>>(iter: T) -> Self {
-        let mut dep_score_list = DepScoreList::default();
+            title,
+        };
         for score in iter {
             dep_score_list.push(score);
         }
@@ -856,7 +890,7 @@ impl FromIterator<Box<dyn Score>> for DepScoreList {
 impl DepScoreList {
     fn push(&mut self, score: Box<dyn Score>) {
         let score_delta = score.delta();
-        if self.score_list.len() == 0 || self.delta.abs() < score_delta.abs() {
+        if self.score_list.is_empty() || self.delta.abs() < score_delta.abs() {
             self.delta = score_delta;
         }
         self.score_list.push(score);
@@ -866,8 +900,13 @@ impl DepScoreList {
         dist: &Dist,
         result_tokens: &HashSet<Token>,
         to_coincidence: &TokenToCoincidence,
+        title: String,
     ) -> DepScoreList {
-        let mut dep_score_list = DepScoreList::default();
+        let mut dep_score_list = DepScoreList {
+            score_list: Vec::new(),
+            delta: 0.0,
+            title,
+        };
         for (token, prob) in dist.token_and_prob.iter() {
             let score = SingleScore::new(result_tokens, token, to_coincidence, prob);
             dep_score_list.push(Box::new(score));
@@ -881,9 +920,13 @@ impl DepScoreList {
 struct IndScoreList {
     score_list: Vec<Box<dyn Score>>,
     delta: f32,
+    title: String,
 }
 
 impl Score for IndScoreList {
+    fn title(&self) -> String {
+        self.title.clone()
+    }
     fn annotations(&self) -> Vec<Annotation> {
         self.score_list
             .iter()
@@ -897,10 +940,9 @@ impl Score for IndScoreList {
         format!(
             "<table border=\"1\" style=\"border-collapse: collapse; width: max-content;\">
             <tr>
-                <th colspan=\"2\" style=\"text-align: center; font-weight: bold;\">IndScoreList</th>
+                <th colspan=\"2\" style=\"text-align: center; font-weight: bold;\">{title}</th>
             </tr>
             <tr>
-                <td>score list</td>
                 <td>
                     <div style=\"display: flex; align-items: flex-start;\">
                         {score_list}
@@ -908,11 +950,11 @@ impl Score for IndScoreList {
                 </td>
             </tr>
             <tr>
-                <td>delta</td>
-                <td>{delta}</td>
+                <td>points {delta}</td>
             </tr>
         </table>
         ",
+            title = self.title(),
             score_list = self
                 .score_list
                 .iter()
@@ -924,18 +966,22 @@ impl Score for IndScoreList {
     }
 }
 
-impl Default for IndScoreList {
-    fn default() -> Self {
-        Self {
+// impl Default for IndScoreList {
+//     fn default() -> Self {
+//         Self {
+//             score_list: Vec::new(),
+//             delta: 0.0,
+//         }
+//     }
+// }
+
+impl IndScoreList {
+    fn collect_and_title<T: IntoIterator<Item = Box<dyn Score>>>(iter: T, title: String) -> Self {
+        let mut ind_score_list = IndScoreList {
             score_list: Vec::new(),
             delta: 0.0,
-        }
-    }
-}
-
-impl FromIterator<Box<dyn Score>> for IndScoreList {
-    fn from_iter<T: IntoIterator<Item = Box<dyn Score>>>(iter: T) -> Self {
-        let mut ind_score_list = IndScoreList::default();
+            title,
+        };
         for score in iter {
             ind_score_list.push(score);
         }
@@ -953,8 +999,13 @@ impl IndScoreList {
         dist: &Dist,
         result_tokens: &HashSet<Token>,
         to_coincidence: &TokenToCoincidence,
+        title: String,
     ) -> IndScoreList {
-        let mut ind_score_list = IndScoreList::default();
+        let mut ind_score_list = IndScoreList {
+            score_list: Vec::new(),
+            delta: 0.0,
+            title,
+        };
         for (token, prob) in dist.token_and_prob.iter() {
             let score = SingleScore::new(result_tokens, token, to_coincidence, prob);
             ind_score_list.push(Box::new(score));
@@ -970,11 +1021,20 @@ impl Person {
         name_to_coincidence: &TokenToCoincidence,
     ) -> IndScoreList {
         // cmk0
-        self.name_dist_list
-            .iter()
-            .map(|dist| DepScoreList::new(dist, result_tokens, name_to_coincidence))
-            .map(|dep_score_list| Box::new(dep_score_list) as Box<dyn Score>)
-            .collect()
+        IndScoreList::collect_and_title(
+            self.name_dist_list
+                .iter()
+                .map(|dist| {
+                    DepScoreList::new(
+                        dist,
+                        result_tokens,
+                        name_to_coincidence,
+                        "abs_max: name & nicknames".to_string(),
+                    )
+                })
+                .map(|dep_score_list| Box::new(dep_score_list) as Box<dyn Score>),
+            "first name + ... + last name".to_string(),
+        )
     }
 
     pub fn city_points(
@@ -983,11 +1043,20 @@ impl Person {
         city_to_coincidence: &TokenToCoincidence,
     ) -> DepScoreList {
         // cmk0
-        self.city_dist_list
-            .iter()
-            .map(|dist| DepScoreList::new(dist, result_tokens, city_to_coincidence))
-            .map(|dep_score_list| Box::new(dep_score_list) as Box<dyn Score>)
-            .collect()
+        DepScoreList::collect_and_title(
+            self.city_dist_list
+                .iter()
+                .map(|dist| {
+                    DepScoreList::new(
+                        dist,
+                        result_tokens,
+                        city_to_coincidence,
+                        "abs_max: city & nickname".to_string(),
+                    )
+                })
+                .map(|dep_score_list| Box::new(dep_score_list) as Box<dyn Score>),
+            "abs_max: city first part, ..., last part".to_string(),
+        )
     }
     // cmk be sure that init 0.0 is right
 }
@@ -1020,9 +1089,8 @@ impl PartialEq for Person {
 
 struct LinePeople {
     line: String,
-    show_work: String,
     max_prob: f32,
-    person_prob_list: Vec<(Rc<Person>, f32)>,
+    person_prob_list: Vec<(Rc<Person>, f32, String)>,
 }
 
 pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io::Result<String>>> {

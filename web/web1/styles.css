@@ -6,6 +6,13 @@ button {
     margin-top: 10px;
 }
 
+
+.tab {
+    margin-left: 40px;
+    /* or whatever space you want for a tab */
+    display: inline-block;
+}
+
 .small-indented {
     font-size: 0.8em;
     /* make it smaller */

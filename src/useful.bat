@@ -5,7 +5,7 @@ cargo run --example esr
 
 cargo check --target wasm32-unknown-unknown --features alloc --no-default-features
 
-# from tests/wasm-demo
+# from race-results\web\web1
 wasm-pack build --target web
 
 # test native

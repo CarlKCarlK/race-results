@@ -29,11 +29,11 @@ async function callWasmFunction(includeCity) {
     var members = document.getElementById('members').value;
     var results = document.getElementById('results').value;
 
-    document.getElementById('matches').value = "Running ...";
+    document.getElementById('matches').innerText = "Running ...";
     await sleep(0);
 
     var wasmOutput = member_match(members, results, includeCity);
-    document.getElementById('matches').value = wasmOutput;
+    document.getElementById('matches').innerHTML = wasmOutput;
 }
 
 
