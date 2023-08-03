@@ -34,11 +34,13 @@ flate!(pub static SAMPLE_RESULTS_STR: str from "../../Shares/RaceResults/sample_
 fn is_comma_or_tab(c: char) -> bool {
     c == ',' || c == '\t'
 }
+
+// Barb & Ed seems to be interpreted a two parts of one name, not as an alternative
 fn is_slash_or_ampersand(c: char) -> bool {
     c == '/' || c == '&'
 }
 fn is_whitespace_or_dash(c: char) -> bool {
-    c.is_whitespace() || c == '-'
+    c.is_whitespace() || c == '-' || c == '\u{00B6}' // backwards P, paragraph character
 }
 fn is_any_separator(c: char) -> bool {
     is_comma_or_tab(c) || is_slash_or_ampersand(c) || is_whitespace_or_dash(c)
@@ -326,7 +328,7 @@ impl Config {
         result_token_to_line_count
     }
 
-    fn annotate_line<T: Score>(result_line: &str, all_points: &T) -> String {
+    fn annotate_line<T: Score>(result_line: &str, all_points: &T, missing: &str) -> String {
         let annotations = all_points.annotations();
 
         // Find the first location of every token in the result line
@@ -376,19 +378,29 @@ impl Config {
         // for every location/token (from the back), insert the annotationS into the result line
         let mut annotated = result_line.to_string();
         for (token, range_or_none) in token_and_range {
-            let annotation_set = &token_to_annotation_list[&token];
-            let pts_str = annotation_set
+            let delta_list = &token_to_annotation_list[&token]
                 .iter()
-                .map(|annotation| format!("{:+.2}", annotation.delta))
+                .map(|a| a.delta)
+                .collect_vec();
+            let pts_str = delta_list
+                .iter()
+                .map(|delta| format!("{:+.2}", delta))
                 .join("");
+            let color = if delta_list.iter().sum::<f32>() >= 0.0 {
+                ""
+            } else {
+                "style=\"background-color: red; color: white;\""
+            };
             if let Some(range) = range_or_none {
                 let s = &result_line[range.clone()];
                 annotated.replace_range(
                     range.clone(),
-                    &format!("<mark>{s}<sup>{pts_str} pts</sup></mark>"),
+                    &format!("<mark {color}>{s}<sup>{pts_str} pts</sup></mark>"),
                 );
             } else {
-                annotated.push_str(&format!("<mark style=\"background-color: red; color: white;\"> -Missing: {token}<sup>{pts_str} pts</sup></mark>"));
+                annotated.push_str(&format!(
+                    "<mark {color}> -{missing}: {token}<sup>{pts_str} pts</sup></mark>"
+                ));
             }
         }
         annotated
@@ -436,11 +448,17 @@ impl Config {
                 let post_prob = prob(post_points);
 
                 if post_prob > self.threshold_probability {
-                    let annotated_line = Config::annotate_line(result_line, &all_points);
+                    let annotated_result_line =
+                        Config::annotate_line(result_line, &all_points, "Missing:");
+                    let annotated_input_person =
+                        Config::annotate_line(&person.input_pretty, &all_points, "Nickname:");
                     let show_work = format!(
-                        "{prob:.2}%: {annotated_line}<br/>{all_points}<br/>",
+                        "{prob:.2}%: {annotated_result_line}<br/>
+                        {annotated_input_person}<br/>
+                        {all_points}<br/>",
                         prob = post_prob * 100.0,
-                        annotated_line = annotated_line,
+                        annotated_result_line = annotated_result_line,
+                        annotated_input_person = annotated_input_person,
                         all_points = all_points.html(),
                     );
                     match &mut line_people {
@@ -569,7 +587,7 @@ impl Config {
                 name_dist_list,
                 city_dist_list,
                 id,
-                input_text: line.to_string(),
+                input_pretty: format!("{} {} @ {}", fields[0], fields[1], fields[2]),
             });
 
             person
@@ -632,48 +650,21 @@ impl Config {
     }
 
     // cmk this should be a method of LinePeople ???
+    // cmk might as well return a string
     fn format_final_output(&self, line_people_list: Vec<LinePeople>) -> Vec<String> {
-        // line_people_list.sort_by(|a, b| a.max_prob.partial_cmp(&b.max_prob).unwrap());
         let mut line_list = Vec::new();
         for line_people in line_people_list.iter() {
             line_list.push(format!("{}<br/>", line_people.line));
             let mut person_prob_list = line_people.person_prob_list.clone();
             person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             for (person, prob, show_work) in person_prob_list.iter() {
-                let input_text = person
-                    .input_text
-                    .replace('\t', "<span class=\"tab\"></span>");
                 line_list.push(format!(
                     "{prob:.2}%: {person}<br/>",
                     prob = prob * 100.0,
-                    person = input_text,
+                    person = person.input_pretty,
                 ));
                 line_list.push(format!("{show_work}<br/>"));
             }
-
-            //     };
-
-            //     // line_list.push(line_people.line.to_string());
-            //     line_list.push(line_people.show_work.to_string());
-            //     // let mut person_prob_list = line_people.person_prob_list.clone();
-            //     // // sort by prob
-            //     // person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-            //     // for (person, prob) in person_prob_list.iter() {
-            //     //     let name_list = person
-            //     //         .name_dist_list
-            //     //         .iter()
-            //     //         .map(|name_dist| name_dist.tokens().collect_vec())
-            //     //         .collect_vec();
-            //     //     let city_list = person
-            //     //         .city_dist_list
-            //     //         .iter()
-            //     //         .map(|city_dist| city_dist.tokens().collect_vec())
-            //     //         .collect_vec();
-
-            //     //     let line = format!("   {:.2} {:?} {:?}", prob, name_list, city_list,);
-            //     //     line_list.push(line);
-            //     // }
-            // }
         }
         line_list
     }
@@ -710,7 +701,7 @@ struct Person {
     name_dist_list: Vec<Dist>,
     city_dist_list: Vec<Dist>,
     id: usize,
-    input_text: String,
+    input_pretty: String,
 }
 
 trait Score: core::fmt::Debug {
