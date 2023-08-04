@@ -1,0 +1,108 @@
+.readonly-content {
+    box-sizing: border-box;
+    /* Include padding and border in total width */
+    width: 100%;
+    /* Full width */
+    height: 400px;
+    /* Adjust as needed */
+    overflow: auto;
+    /* Adds scrollbars if content overflows */
+    resize: vertical;
+    /* Allows vertical resizing only */
+    border: 2px solid #555;
+    /* Darker border */
+    padding: 10px;
+    /* Optional, for spacing */
+}
+
+pre,
+.indented-table {
+    margin: 5px;
+    /* Remove default margins */
+}
+
+.indented-table {
+    margin-left: 40px;
+}
+
+table {
+    border-collapse: collapse;
+    border: 2px solid black;
+}
+
+td {
+    border: 2px solid black;
+    padding: 4px;
+    white-space: nowrap;
+}
+
+td.numeric {
+    text-align: right;
+    font-family: monospace;
+}
+
+td.text {
+    text-align: left;
+}
+
+
+textarea {
+    width: 100%;
+}
+
+button {
+    margin-top: 10px;
+}
+
+
+.tab {
+    margin-left: 40px;
+    /* or whatever space you want for a tab */
+    display: inline-block;
+}
+
+.small-indented {
+    font-size: 0.8em;
+    /* make it smaller */
+    text-indent: 20px;
+    /* indent the text */
+    margin-top: 5px;
+    /* little line spacing before it */
+    font-style: italic;
+    /* make it italic */
+    margin-bottom: 5px;
+}
+
+textarea {
+    width: 100%;
+    /* make it take up the full width */
+    resize: vertical;
+    /* allow only vertical resizing */
+}
+
+form {
+    margin: 20px;
+    display: none;
+    /* Hide the form initially */
+}
+
+form div {
+    margin-bottom: 10px;
+}
+
+#valueForm {
+    margin: 20px;
+    padding: 20px;
+    border: 1px solid black;
+    display: none;
+}
+
+#valueForm div {
+    margin-bottom: 10px;
+}
+
+.settingsLink {
+    cursor: pointer;
+    color: blue;
+    text-decoration: underline;
+}
