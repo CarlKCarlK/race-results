@@ -1,21 +1,21 @@
 extern crate alloc;
-use race_results::{Config, SAMPLE_MEMBERS_STR, SAMPLE_RESULTS_STR};
+use race_results::{Config, IncludeCity, SAMPLE_MEMBERS_STR, SAMPLE_RESULTS_STR};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn member_match(members: &str, race_results: &str, include_city: bool) -> JsValue {
+pub fn member_match(members: &str, race_results: &str, include_city: u8) -> JsValue {
+    let include_city = match IncludeCity::try_from(include_city) {
+        Ok(include_city) => include_city,
+        Err(panic) => return JsValue::from_str(format!("Error: {:?}", panic).as_str()),
+    };
+
     // cmk the word 'result' is used in two different ways here
     let function_result = Config {
         // threshold_probability: 0.0,
         // override_results_count: Some(1081),
         ..Config::default()
     }
-    .find_matches(
-        members.lines(),
-        race_results.lines(),
-        race_results.lines(),
-        include_city,
-    );
+    .find_matches(members.lines(), race_results.lines(), include_city);
     let s = match function_result.as_deref() {
         // cmk make this 1% configurable
         Ok([]) => "No matches found above probability 1%".to_string(),

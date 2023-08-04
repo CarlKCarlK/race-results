@@ -1,6 +1,7 @@
 // #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(clippy::print_literal)]
 use include_flate::flate;
+use num_enum::TryFromPrimitive;
 
 mod tests;
 
@@ -251,6 +252,26 @@ impl Default for Config {
     }
 }
 
+#[allow(non_camel_case_types)]
+#[allow(non_upper_case_globals)]
+#[derive(TryFromPrimitive)]
+#[repr(u8)]
+pub enum IncludeCity {
+    Yes = 0,
+    No = 1,
+    Auto = 2,
+}
+
+impl IncludeCity {
+    pub fn to_bool_list(&self) -> Vec<bool> {
+        match self {
+            IncludeCity::Yes => vec![true],
+            IncludeCity::No => vec![false],
+            IncludeCity::Auto => vec![true, false],
+        }
+    }
+}
+
 impl Config {
     pub fn new() -> Self {
         Self::default()
@@ -261,29 +282,58 @@ impl Config {
         &self,
         member_lines: AnyIter<AnyString>,
         result_lines: AnyIter<AnyString>,
+        include_city: IncludeCity,
     ) -> Result<Vec<String>, anyhow::Error> {
         self.assert_that_config_is_valid();
 
+        let member_lines = member_lines
+            .map(|line| line.as_ref().to_string())
+            .collect_vec();
         let result_lines = result_lines
             .map(|line| line.as_ref().to_string())
             .collect_vec();
 
-        let results_as_tokens = self.tokenize_race_results(result_lines);
+        let results_as_tokens = self.tokenize_race_results(&result_lines);
 
         // Look for tokens in the race results that are too common to be useful
         let (name_stop_words, city_stop_words, city_to_coincidence) =
             self.find_stop_words(&results_as_tokens);
 
-        let token_to_person_list =
-            self.index_person_list(member_lines, name_stop_words, city_stop_words, include_city)?;
+        let results_count = self.results_count(&results_as_tokens);
+        let prior_points = log_odds(self.prob_member_in_race / results_count as f32);
 
-        let line_people_list = self.find_matching_people_for_each_result_line(
-            result_lines,
-            &results_as_tokens,
-            &token_to_person_list,
-            &city_to_coincidence,
-        );
+        let mut best = None;
+        for include_city_as_bool in include_city.to_bool_list() {
+            let token_to_person_list = self.index_person_list(
+                &member_lines,
+                &name_stop_words,
+                &city_stop_words,
+                include_city_as_bool,
+            )?;
 
+            let line_people_list = self.find_matching_people_for_each_result_line(
+                &result_lines,
+                &results_as_tokens,
+                &token_to_person_list,
+                &city_to_coincidence,
+            );
+
+            let delta_sum = line_people_list
+                .iter()
+                .map(|line_people| log_odds(line_people.max_prob) - prior_points)
+                .sum::<f32>();
+
+            best = if let Some((best_delta_sum, best_line_people_list)) = best {
+                if delta_sum > best_delta_sum {
+                    Some((delta_sum, line_people_list))
+                } else {
+                    Some((best_delta_sum, best_line_people_list))
+                }
+            } else {
+                Some((delta_sum, line_people_list))
+            }
+        }
+        let line_people_list = best.unwrap().1; // always OK
         let final_output = self.format_final_output(line_people_list);
 
         Ok(final_output)
@@ -418,7 +468,7 @@ impl Config {
     #[anyinput]
     fn find_matching_people_for_each_result_line(
         &self,
-        result_lines: AnyIter<AnyString>,
+        result_lines: &[String],
         results_as_tokens: &[HashSet<Token>],
         token_to_person_list: &HashMap<Token, Vec<Rc<Person>>>,
         city_to_coincidence: &TokenToCoincidence,
@@ -429,8 +479,7 @@ impl Config {
         let mut line_people_list: Vec<LinePeople> = Vec::new();
 
         // for each line in the results
-        for (result_line, result_tokens) in result_lines.zip(results_as_tokens) {
-            let result_line = result_line.as_ref();
+        for (result_line, result_tokens) in result_lines.iter().zip(results_as_tokens) {
             // find people with at least one token in common with the result line
             let person_set = result_tokens
                 .iter()
@@ -572,9 +621,9 @@ impl Config {
     fn index_person_list(
         &self,
         member_lines: AnyIter<AnyString>,
-        name_stop_words: HashSet<Token>,
-        city_stop_words: HashSet<Token>,
-        include_city: bool,
+        name_stop_words: &HashSet<Token>,
+        city_stop_words: &HashSet<Token>,
+        include_city_as_bool: bool,
     ) -> Result<HashMap<Token, Vec<Rc<Person>>>, anyhow::Error> {
         let name_to_nickname_set = extract_name_to_nicknames_set();
 
@@ -590,7 +639,7 @@ impl Config {
             let name = format!("{} {}", fields[0], fields[1]);
             let name_dist_list = self.extract_dist_list(&name, &name_to_nickname_set)?;
 
-            let city = if include_city { fields[2] } else { "" };
+            let city = if include_city_as_bool { fields[2] } else { "" };
             let city_to_nickname_set = HashMap::<Token, HashSet<Token>>::new(); // currently empty
             let city_dist_list = self.extract_dist_list(city, &city_to_nickname_set)?;
 

@@ -25,14 +25,16 @@ function loadResultsFromFile() {
 }
 
 
-async function callWasmFunction(includeCity) {
+async function callWasmFunction() {
     var members = document.getElementById('members').value;
     var results = document.getElementById('results').value;
+    const includeCitySelect = document.getElementById('includeCity');
+    const includeCityValue = Number(includeCitySelect.value);
 
     document.getElementById('matches').innerText = "Running ...";
     await sleep(0);
 
-    var wasmOutput = member_match(members, results, includeCity);
+    var wasmOutput = member_match(members, results, includeCityValue);
     document.getElementById('matches').innerHTML = wasmOutput;
 }
 

@@ -51,8 +51,14 @@
   <p class="small-indented">Plain text, one result per line but extra lines are OK.</p>
   <textarea id="results" rows="8"></textarea>
   <p>Lines per result <input type="number" id="quantity" name="quantity" value="1" oninput="handleQuantityChange()"></input></p>
-  <button onclick="callWasmFunction(true)">Match with City</button>
-  <button onclick="callWasmFunction(false)">Match w/o City</button>
+  <button onclick="callWasmFunction()">Match</button>
+  <label for="includeCity">Include City:</label>
+<select id="includeCity" name="includeCity">
+  <option value="0">Yes</option>
+  <option value="1">No</option>
+  <option value="2">Auto</option>
+</select>
+
   <p></p>
   <label for="matches"><b>Matches</b></label>
 

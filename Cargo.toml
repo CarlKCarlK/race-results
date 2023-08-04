@@ -17,9 +17,10 @@ alloc = []
 
 [dependencies]
 anyinput = "0.1.6"
-itertools = "0.10.5"
+itertools = "0.11.0"
 include-flate = "0.2.0"
 anyhow = "1.0.71"
+num_enum = "0.6.1"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3.37"

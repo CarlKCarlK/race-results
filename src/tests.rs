@@ -5,8 +5,8 @@ use std::fs::File;
 use std::io::Write;
 
 use crate::{
-    delta_many_names, delta_one, delta_one_name, log_odds, prob, read_lines, Config, Token,
-    TokenToCoincidence, SAMPLE_MEMBERS_STR, SAMPLE_RESULTS_STR,
+    delta_many_names, delta_one, delta_one_name, log_odds, prob, read_lines, Config, IncludeCity,
+    Token, TokenToCoincidence, SAMPLE_MEMBERS_STR, SAMPLE_RESULTS_STR,
 };
 use anyhow::anyhow;
 
@@ -296,8 +296,8 @@ fn test2() {
 fn sample_data() -> anyhow::Result<()> {
     let member_lines = SAMPLE_MEMBERS_STR.lines();
     let result_lines = SAMPLE_RESULTS_STR.lines();
-    let include_city = true;
-    let matches = Config::default().find_matches(member_lines, result_lines);
+    let include_city = IncludeCity::Yes;
+    let matches = Config::default().find_matches(member_lines, result_lines, include_city);
 
     let mut file = File::create("sample_data.html")?;
     for line in matches? {
@@ -310,7 +310,7 @@ fn sample_data() -> anyhow::Result<()> {
 // cmk remove
 #[test]
 fn spot_check() {
-    let include_city = false;
+    let include_city = IncludeCity::No;
     let member_lines =
         read_lines(r"C:\Users\carlk\OneDrive\programs\MemberMatch\ESRMembers2012Dec.txt")
             .unwrap()
@@ -318,10 +318,7 @@ fn spot_check() {
     let result_lines = read_lines(r"C:\Users\carlk\Downloads\G_reformatted.txt")
         .unwrap()
         .map(|line| line.unwrap());
-    let result_lines2 = read_lines(r"C:\Users\carlk\Downloads\G_reformatted.txt")
-        .unwrap()
-        .map(|line| line.unwrap());
-    let matches = Config::default().find_matches(member_lines, result_lines);
+    let matches = Config::default().find_matches(member_lines, result_lines, include_city);
     let matches = matches.unwrap();
     for line in matches.iter() {
         println!("{}", line);
@@ -332,9 +329,9 @@ fn spot_check() {
 fn bad_member_data_2() {
     let member_lines = "a\tb\tc\naa\tbb*b\tcc\n".lines();
     let result_lines = SAMPLE_RESULTS_STR.lines();
-    let include_city = true;
+    let include_city = IncludeCity::Yes;
 
-    let matches = Config::default().find_matches(member_lines.clone(), result_lines);
+    let matches = Config::default().find_matches(member_lines.clone(), result_lines, include_city);
     assert_eq!(
         matches.map_err(|e| e.to_string()),
         Err(anyhow!(
@@ -348,8 +345,8 @@ fn bad_member_data_2() {
 fn bad_member_data_1() {
     let member_lines = "a\tb\tc\naa\tbb\n".lines();
     let result_lines = SAMPLE_RESULTS_STR.lines();
-    let include_city = true;
-    let matches = Config::default().find_matches(member_lines, result_lines.clone());
+    let include_city = IncludeCity::Yes;
+    let matches = Config::default().find_matches(member_lines, result_lines.clone(), include_city);
     assert_eq!(
         matches.map_err(|e| e.to_string()),
         Err(
@@ -363,9 +360,9 @@ fn bad_member_data_1() {
 fn multi_name_cities() {
     let member_lines = "a\tb\tLake Forest Park\n".lines();
     let result_lines = SAMPLE_RESULTS_STR.lines();
-    let include_city = true;
+    let include_city = IncludeCity::Yes;
     let matches = Config::default()
-        .find_matches(member_lines, result_lines.clone())
+        .find_matches(member_lines, result_lines.clone(), include_city)
         .unwrap();
     assert!(matches.is_empty());
 }
@@ -374,13 +371,13 @@ fn multi_name_cities() {
 fn multi_part_names() {
     let member_lines = "Rob Roy\tSmith\tSeattle\n".lines(); //Jaime\tHerrera-Beutler\tKirkland\nSheila Bob\tJackson Lee\tBellevue\n
     let result_lines = "2120	Rob Roy Smith	Seattle	Male	Male 45-49	3:52:38\n".lines();
-    let include_city = true;
+    let include_city = IncludeCity::Yes;
     let matches = Config {
         // threshold_probability: 0.0,
         override_results_count: Some(1081),
         ..Config::default()
     }
-    .find_matches(member_lines, result_lines.clone())
+    .find_matches(member_lines, result_lines.clone(), include_city)
     .unwrap();
     for line in matches.iter() {
         println!("{line}");
@@ -389,13 +386,13 @@ fn multi_part_names() {
 
     let member_lines = "Rob Roy\tSmith\tSeattle\n".lines(); //Jaime\tHerrera-Beutler\tKirkland\nSheila Bob\tJackson Lee\tBellevue\n
     let result_lines = SAMPLE_RESULTS_STR.lines();
-    let include_city = true;
+    let include_city = IncludeCity::Yes;
     let matches = Config {
         threshold_probability: 0.0,
         override_results_count: Some(1081),
         ..Config::default()
     }
-    .find_matches(member_lines, result_lines.clone())
+    .find_matches(member_lines, result_lines.clone(), include_city)
     .unwrap();
     for line in matches.iter() {
         println!("{line}");
@@ -407,13 +404,13 @@ fn multi_part_names() {
 fn missing_names() {
     let member_lines = "Forte,,Lakewood\n".lines();
     let result_lines = SAMPLE_RESULTS_STR.lines();
-    let include_city = true;
+    let include_city = IncludeCity::Yes;
     let matches = Config {
         // threshold_probability: 0.0,
         override_results_count: Some(1081),
         ..Config::default()
     }
-    .find_matches(member_lines, result_lines.clone())
+    .find_matches(member_lines, result_lines.clone(), include_city)
     .unwrap();
     for line in matches.iter() {
         println!("{line}");
