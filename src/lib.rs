@@ -165,6 +165,12 @@ impl TokenToCoincidence {
             let prob = prob.parse::<f32>().unwrap();
             name_to_coincidence.insert(name, prob);
         }
+        // override for single letter names
+        let single_letter_prob = 0.01f32;
+        for single_letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars() {
+            let name = Token::new(&single_letter.to_string());
+            name_to_coincidence.insert(name, single_letter_prob);
+        }
         let min_prob = name_to_coincidence.values().fold(1.0f32, |a, b| a.min(*b));
         Self {
             token_to_prob: name_to_coincidence,
@@ -255,10 +261,12 @@ impl Config {
         &self,
         member_lines: AnyIter<AnyString>,
         result_lines: AnyIter<AnyString>,
-        result_lines2: AnyIter<AnyString>,
-        include_city: bool,
     ) -> Result<Vec<String>, anyhow::Error> {
         self.assert_that_config_is_valid();
+
+        let result_lines = result_lines
+            .map(|line| line.as_ref().to_string())
+            .collect_vec();
 
         let results_as_tokens = self.tokenize_race_results(result_lines);
 
@@ -270,7 +278,7 @@ impl Config {
             self.index_person_list(member_lines, name_stop_words, city_stop_words, include_city)?;
 
         let line_people_list = self.find_matching_people_for_each_result_line(
-            result_lines2,
+            result_lines,
             &results_as_tokens,
             &token_to_person_list,
             &city_to_coincidence,
@@ -410,7 +418,7 @@ impl Config {
     #[anyinput]
     fn find_matching_people_for_each_result_line(
         &self,
-        result_lines2: AnyIter<AnyString>,
+        result_lines: AnyIter<AnyString>,
         results_as_tokens: &[HashSet<Token>],
         token_to_person_list: &HashMap<Token, Vec<Rc<Person>>>,
         city_to_coincidence: &TokenToCoincidence,
@@ -421,7 +429,7 @@ impl Config {
         let mut line_people_list: Vec<LinePeople> = Vec::new();
 
         // for each line in the results
-        for (result_line, result_tokens) in result_lines2.zip(results_as_tokens) {
+        for (result_line, result_tokens) in result_lines.zip(results_as_tokens) {
             let result_line = result_line.as_ref();
             // find people with at least one token in common with the result line
             let person_set = result_tokens
@@ -448,19 +456,22 @@ impl Config {
                 let post_prob = prob(post_points);
 
                 if post_prob > self.threshold_probability {
-                    let annotated_result_line =
-                        Config::annotate_line(result_line, &all_points, "Missing:");
+                    // let annotated_result_line =
+                    //     Config::annotate_line(result_line, &all_points, "Missing");
                     let annotated_input_person =
-                        Config::annotate_line(&person.input_pretty, &all_points, "Nickname:");
+                        Config::annotate_line(&person.input_pretty, &all_points, "Nickname");
                     let show_work = format!(
-                        "{prob:.2}%: {annotated_result_line}<br/>
-                        {annotated_input_person}<br/>
-                        {all_points}<br/>",
+                        "
+                    <tr>
+                    <td class=\"numeric\">{prob:.0}%</td>
+                    <td class=\"text\">{annotated_input_person}</td>
+                    <td class=\"numeric\">{all_delta:.2} pts</td>
+                </tr>",
                         prob = post_prob * 100.0,
-                        annotated_result_line = annotated_result_line,
                         annotated_input_person = annotated_input_person,
-                        all_points = all_points.html(),
+                        all_delta = all_points.delta()
                     );
+
                     match &mut line_people {
                         None => {
                             line_people = Some(LinePeople {
@@ -654,17 +665,15 @@ impl Config {
     fn format_final_output(&self, line_people_list: Vec<LinePeople>) -> Vec<String> {
         let mut line_list = Vec::new();
         for line_people in line_people_list.iter() {
-            line_list.push(format!("{}<br/>", line_people.line));
+            line_list.push(format!("<pre>{}</pre>", line_people.line));
             let mut person_prob_list = line_people.person_prob_list.clone();
             person_prob_list.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-            for (person, prob, show_work) in person_prob_list.iter() {
-                line_list.push(format!(
-                    "{prob:.2}%: {person}<br/>",
-                    prob = prob * 100.0,
-                    person = person.input_pretty,
-                ));
-                line_list.push(format!("{show_work}<br/>"));
+
+            line_list.push("<div class=\"indented-table\"><table>".to_string());
+            for (_person, _prob, show_work) in person_prob_list.iter() {
+                line_list.push(show_work.clone());
             }
+            line_list.push("</table></div>".to_string());
         }
         line_list
     }
@@ -1110,3 +1119,4 @@ pub fn read_lines<P: AsRef<Path>>(path: P) -> io::Result<impl Iterator<Item = io
 // cmkdoc member list is tab or comma columns. Names and cities can have muliple words separated by spaces or -.
 // cmkdoc finally alteratives are separated by / or &
 // cmk test creating nice HTML when the name is Seattle Seattle living in Seattle
+// cmk accept members First Last @ City without tabs

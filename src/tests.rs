@@ -297,12 +297,7 @@ fn sample_data() -> anyhow::Result<()> {
     let member_lines = SAMPLE_MEMBERS_STR.lines();
     let result_lines = SAMPLE_RESULTS_STR.lines();
     let include_city = true;
-    let matches = Config::default().find_matches(
-        member_lines,
-        result_lines.clone(),
-        result_lines,
-        include_city,
-    );
+    let matches = Config::default().find_matches(member_lines, result_lines);
 
     let mut file = File::create("sample_data.html")?;
     for line in matches? {
@@ -326,8 +321,7 @@ fn spot_check() {
     let result_lines2 = read_lines(r"C:\Users\carlk\Downloads\G_reformatted.txt")
         .unwrap()
         .map(|line| line.unwrap());
-    let matches =
-        Config::default().find_matches(member_lines, result_lines, result_lines2, include_city);
+    let matches = Config::default().find_matches(member_lines, result_lines);
     let matches = matches.unwrap();
     for line in matches.iter() {
         println!("{}", line);
@@ -340,12 +334,7 @@ fn bad_member_data_2() {
     let result_lines = SAMPLE_RESULTS_STR.lines();
     let include_city = true;
 
-    let matches = Config::default().find_matches(
-        member_lines.clone(),
-        result_lines.clone(),
-        result_lines,
-        include_city,
-    );
+    let matches = Config::default().find_matches(member_lines.clone(), result_lines);
     assert_eq!(
         matches.map_err(|e| e.to_string()),
         Err(anyhow!(
@@ -360,12 +349,7 @@ fn bad_member_data_1() {
     let member_lines = "a\tb\tc\naa\tbb\n".lines();
     let result_lines = SAMPLE_RESULTS_STR.lines();
     let include_city = true;
-    let matches = Config::default().find_matches(
-        member_lines,
-        result_lines.clone(),
-        result_lines.clone(),
-        include_city,
-    );
+    let matches = Config::default().find_matches(member_lines, result_lines.clone());
     assert_eq!(
         matches.map_err(|e| e.to_string()),
         Err(
@@ -381,12 +365,7 @@ fn multi_name_cities() {
     let result_lines = SAMPLE_RESULTS_STR.lines();
     let include_city = true;
     let matches = Config::default()
-        .find_matches(
-            member_lines,
-            result_lines.clone(),
-            result_lines.clone(),
-            include_city,
-        )
+        .find_matches(member_lines, result_lines.clone())
         .unwrap();
     assert!(matches.is_empty());
 }
@@ -401,12 +380,7 @@ fn multi_part_names() {
         override_results_count: Some(1081),
         ..Config::default()
     }
-    .find_matches(
-        member_lines,
-        result_lines.clone(),
-        result_lines.clone(),
-        include_city,
-    )
+    .find_matches(member_lines, result_lines.clone())
     .unwrap();
     for line in matches.iter() {
         println!("{line}");
@@ -421,12 +395,7 @@ fn multi_part_names() {
         override_results_count: Some(1081),
         ..Config::default()
     }
-    .find_matches(
-        member_lines,
-        result_lines.clone(),
-        result_lines.clone(),
-        include_city,
-    )
+    .find_matches(member_lines, result_lines.clone())
     .unwrap();
     for line in matches.iter() {
         println!("{line}");
@@ -444,12 +413,7 @@ fn missing_names() {
         override_results_count: Some(1081),
         ..Config::default()
     }
-    .find_matches(
-        member_lines,
-        result_lines.clone(),
-        result_lines.clone(),
-        include_city,
-    )
+    .find_matches(member_lines, result_lines.clone())
     .unwrap();
     for line in matches.iter() {
         println!("{line}");
