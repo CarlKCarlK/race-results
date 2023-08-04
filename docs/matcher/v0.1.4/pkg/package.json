@@ -1,6 +1,6 @@
 {
   "name": "web1",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "files": [
     "web1_bg.wasm",
     "web1.js",

@@ -21,7 +21,8 @@ Apache License, Version 2.0, or MIT license.
 
 You paste in a list of your club members and the race results of interest. It displays a list of the most likely matches. The program understands nicknames.
 
-Under the covers, the program searches the results for the names and city of your club members. It assigns points for each match and subtracts different points for each miss. The points are based on the distinctiveness of the name, so matching "Chellie" is worth more than matching "Robert". The program assigns and maninulates points based on "naive Bayes" and probability theory.
+Under the covers, the program searches the results for the names and city of your club members. It assigns points for each match and subtracts different points for each miss. The points are based on the distinctiveness of the name, so matching "Chellie" is worth more than matching "Robert". The program assigns and maninulates points based on ["naive Bayes"]((https://medium.com/towards-data-science/use-bayes-theorem-to-find-distinctive-names-in-a-list-5acd8fe03c2b))
+ probability theory.
 
 Embedded inside the program is a table of 250,000 names and their distinctiveness. The program also includes a table of nicknames. The program is written in Rust and compiled "WASM" which runs in web browsers.
 
